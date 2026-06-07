@@ -1,0 +1,12 @@
+[package]
+name = "vvcm-rs"
+version = "1.0.0"
+edition = "2024"
+description = "Kinematics of multi-robot transporting systems with a deformable sheet using VVCM."
+authors = ["MorningFrog <1098224028@qq.com>"]
+license = "Apache-2.0"
+repository = "https://github.com/morningfrog/vvcm-rs"
+
+[dependencies]
+nalgebra = "0.35.0"
+thiserror = "2.0.18"
