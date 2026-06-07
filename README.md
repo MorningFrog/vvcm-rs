@@ -13,6 +13,9 @@ kinematics core still needs to be ported.
 
 - Public API uses Rust domain types such as `Point2`, `Point3`,
   `RobotFormation`, `SheetShape`, and `FkSolution`.
+- FK results are stored as one list of `FkSolution` values; each solution has a
+  `stable` flag instead of mirroring the C++ implementation's separated stable
+  and all-solution arrays.
 - `nalgebra` is kept as an internal numerical backend, not as the main public
   interface.
 - `VvcmFk::update_stable_solutions` currently returns

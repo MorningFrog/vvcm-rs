@@ -183,14 +183,16 @@ impl SheetShape {
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct FkSolution {
+    pub stable: bool,
     pub po: Point3,
     pub vo: Point2,
     pub taut_cables: Vec<usize>,
 }
 
 impl FkSolution {
-    pub fn new(po: Point3, vo: Point2, taut_cables: Vec<usize>) -> Self {
+    pub fn new(stable: bool, po: Point3, vo: Point2, taut_cables: Vec<usize>) -> Self {
         Self {
+            stable,
             po,
             vo,
             taut_cables,
@@ -200,17 +202,31 @@ impl FkSolution {
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct FkSolutions {
-    pub stable: Vec<FkSolution>,
-    pub all: Vec<FkSolution>,
-    pub stable_indices: Vec<usize>,
+    pub solutions: Vec<FkSolution>,
 }
 
 impl FkSolutions {
+    pub fn new(solutions: Vec<FkSolution>) -> Self {
+        Self { solutions }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.solutions.is_empty()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &FkSolution> {
+        self.solutions.iter()
+    }
+
+    pub fn stable(&self) -> impl Iterator<Item = &FkSolution> {
+        self.solutions.iter().filter(|solution| solution.stable)
+    }
+
     pub fn stable_count(&self) -> usize {
-        self.stable.len()
+        self.stable().count()
     }
 
     pub fn all_count(&self) -> usize {
-        self.all.len()
+        self.solutions.len()
     }
 }

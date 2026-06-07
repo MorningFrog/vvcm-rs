@@ -1,4 +1,6 @@
-use vvcm_rs::{Point2, RobotFormation, SheetShape, VvcmError, VvcmFk};
+use vvcm_rs::{
+    FkSolution, FkSolutions, Point2, Point3, RobotFormation, SheetShape, VvcmError, VvcmFk,
+};
 
 #[test]
 fn fk_scaffold_can_be_constructed() {
@@ -27,4 +29,29 @@ fn fk_scaffold_can_be_constructed() {
     assert_eq!(fk.hold_height(), 1000.0);
     assert_eq!(fk.solutions().stable_count(), 0);
     assert_eq!(fk.solutions().all_count(), 0);
+}
+
+#[test]
+fn fk_solutions_track_stability_per_solution() {
+    let solutions = FkSolutions::new(vec![
+        FkSolution::new(
+            false,
+            Point3::new(1.0, 2.0, 3.0),
+            Point2::new(4.0, 5.0),
+            vec![0, 1, 2],
+        ),
+        FkSolution::new(
+            true,
+            Point3::new(6.0, 7.0, 8.0),
+            Point2::new(9.0, 10.0),
+            vec![1, 2, 3],
+        ),
+    ]);
+
+    assert_eq!(solutions.all_count(), 2);
+    assert_eq!(solutions.stable_count(), 1);
+    assert_eq!(
+        solutions.stable().next().unwrap().po,
+        Point3::new(6.0, 7.0, 8.0)
+    );
 }

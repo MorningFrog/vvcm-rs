@@ -1,6 +1,6 @@
 use crate::error::VvcmError;
 use crate::fk::VvcmFk;
-use crate::types::{FkSolution, Point2, Point3, RobotFormation, Scalar, SheetShape};
+use crate::types::{FkSolution, FkSolutions, Point2, Point3, RobotFormation, Scalar, SheetShape};
 
 #[derive(Debug, Clone)]
 pub struct VvcmManualSimulation {
@@ -88,7 +88,7 @@ impl VvcmManualSimulation {
     ) -> Result<Point3, VvcmError> {
         let solutions = self.fk_engine.update_stable_solutions(local_formation)?;
         let (solution_index, solution) =
-            closest_solution(&solutions.stable, reference).ok_or(VvcmError::NoStableSolution)?;
+            closest_stable_solution(solutions, reference).ok_or(VvcmError::NoStableSolution)?;
 
         self.solution_index = Some(solution_index);
         self.object_position = Some(solution.po);
@@ -98,10 +98,14 @@ impl VvcmManualSimulation {
     }
 }
 
-fn closest_solution(solutions: &[FkSolution], reference: Point3) -> Option<(usize, &FkSolution)> {
+fn closest_stable_solution(
+    solutions: &FkSolutions,
+    reference: Point3,
+) -> Option<(usize, &FkSolution)> {
     solutions
         .iter()
         .enumerate()
+        .filter(|(_, solution)| solution.stable)
         .min_by(|(_, left), (_, right)| {
             left.po
                 .distance_to(reference)
