@@ -62,6 +62,9 @@ cd <repository-name>
 cargo build
 ```
 
+For C++ export work and tests, install a C++17 compiler. On Windows, MSVC is
+recommended; on Linux and macOS, GCC or Clang is sufficient.
+
 ### 3. Install Python Binding Tools
 
 Use a virtual environment for Python binding development and tests:
@@ -95,6 +98,13 @@ maturin develop
 python -m pytest tests/python
 ```
 
+When changing C/C++ export headers or FFI, also confirm the C++ smoke test
+succeeds:
+
+```bash
+cargo test --test cpp_export_smoke
+```
+
 Code requirements:
 
 * Use clear and meaningful names
@@ -118,6 +128,12 @@ Python binding changes should also pass:
 ```bash
 maturin develop
 python -m pytest tests/python
+```
+
+C/C++ export changes should also pass:
+
+```bash
+cargo test --test cpp_export_smoke
 ```
 
 When adding a feature or fixing a bug, add or update tests whenever possible.

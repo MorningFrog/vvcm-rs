@@ -1,4 +1,4 @@
-#![forbid(unsafe_code)]
+#![deny(unsafe_code)]
 #![warn(missing_docs)]
 
 //! Forward kinematics and simulation utilities for the Virtual Variable Cables
@@ -36,6 +36,9 @@
 //! ```
 
 pub mod error;
+#[doc(hidden)]
+#[allow(unsafe_code)]
+pub mod ffi;
 pub mod fk;
 pub mod manual_simulation;
 pub mod simulation;

@@ -51,6 +51,9 @@ For the original VVCM model, please cite:
   the closest stable FK branch.
 - `VvcmManualSimulation` returns the closest stable FK branch for externally
   supplied robot formations.
+- C and C++ exports are available through `include/vvcm_rs.h` and the
+  header-only C++ wrapper `include/vvcm_rs.hpp`. The crate builds native
+  `cdylib` and `staticlib` artifacts for external linking.
 - Python bindings are available through the `vvcm_rs` package. The wheel ships
   typed Python package files (`py.typed` and `__init__.pyi`) so editors and type
   checkers can inspect the exported classes.
@@ -62,14 +65,21 @@ For the original VVCM model, please cite:
 - `manual_simulation`: wrapper for querying a new stable solution from an
   externally provided robot formation.
 - `types`: public domain types used by the Rust API.
+- `ffi`: C ABI implementation behind the C/C++ headers.
 - `error`: crate error type.
 
 ## Quick Start
 
-Run the smoke tests:
+Run the smoke tests. The C++ export smoke test requires a C++17 compiler:
 
 ```shell
 cargo test
+```
+
+Run only the C++ export smoke test:
+
+```shell
+cargo test --test cpp_export_smoke
 ```
 
 Run the basic forward-kinematics example:
@@ -109,6 +119,58 @@ for solution in solutions.stable() {
     println!("{:?}", solution.po);
 }
 # Ok::<(), vvcm_rs::VvcmError>(())
+```
+
+## C++ Usage
+
+Build the native library artifacts:
+
+```shell
+cargo build --lib
+```
+
+On Windows this produces `target/debug/vvcm_rs.dll`,
+`target/debug/vvcm_rs.dll.lib`, and `target/debug/vvcm_rs.lib`. On Linux and
+macOS, link against the generated `libvvcm_rs` shared or static library under
+the corresponding target profile directory.
+
+Include `include/vvcm_rs.hpp` for the C++17 RAII wrapper, or
+`include/vvcm_rs.h` for the raw C ABI. The C++ wrapper accepts ordinary
+`std::vector<vvcm_rs::Point2>` coordinate lists, exposes `VvcmFk`,
+`VvcmSimulation`, and `VvcmManualSimulation`, and throws `vvcm_rs::Error` when
+the Rust solver reports an error.
+
+```cpp
+#include "vvcm_rs.hpp"
+
+#include <iostream>
+#include <vector>
+
+int main() {
+    using namespace vvcm_rs;
+
+    std::vector<Point2> formation = {
+        Point2(213.7f, 122.7f),
+        Point2(804.6f, 37.2f),
+        Point2(904.0f, 550.0f),
+        Point2(439.3f, 715.9f),
+    };
+    std::vector<Point2> sheet = {
+        Point2(-316.1f, -421.9f),
+        Point2(803.4f, -384.1f),
+        Point2(746.1f, 712.8f),
+        Point2(-367.3f, 664.2f),
+    };
+
+    VvcmFk fk(4, 1000.0f, sheet);
+    FkSolutions solutions = fk.update_stable_solutions(formation);
+
+    for (const auto &solution : solutions.stable()) {
+        std::cout << solution.po.x << " "
+                  << solution.po.y << " "
+                  << solution.po.z << "\n";
+    }
+}
 ```
 
 ## Python Usage

@@ -9,3 +9,5 @@ __pycache__/
 *.pdb
 
 /.vscode/settings.json
+
+/test.py
