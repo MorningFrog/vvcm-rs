@@ -72,6 +72,9 @@ for solution in solutions.stable() {
 ```
 
 The default length unit follows the C++ implementation examples: millimeters.
+If `VvcmFk` sees values that look very small for millimeter-scale data, such as
+meter-scale coordinates, it emits a warning to `stderr`. Convert meter inputs to
+millimeters before solving, for example by multiplying lengths by `1000.0`.
 
 ## Porting Roadmap
 

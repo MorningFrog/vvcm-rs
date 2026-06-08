@@ -6,6 +6,7 @@ use nalgebra::{DMatrix, DVector};
 const RANK_EPS: Scalar = 1.0e-4;
 const STABILITY_EPS: Scalar = 1.0e-8;
 const SLACK_EPS: Scalar = 1.0e-8;
+const SMALL_INPUT_WARNING_THRESHOLD_MM: Scalar = 10.0;
 
 #[derive(Debug, Clone)]
 pub struct VvcmFk {
@@ -14,6 +15,7 @@ pub struct VvcmFk {
     sheet: SheetShape,
     formation: Option<RobotFormation>,
     solutions: FkSolutions,
+    unit_warning_emitted: bool,
 }
 
 impl VvcmFk {
@@ -40,13 +42,17 @@ impl VvcmFk {
 
         let _sheet_matrix = math::sheet_to_matrix(&sheet);
 
-        Ok(Self {
+        let mut fk = Self {
             robot_count,
             hold_height,
             sheet,
             formation: None,
             solutions: FkSolutions::default(),
-        })
+            unit_warning_emitted: false,
+        };
+        fk.warn_if_unit_scale_looks_small(None);
+
+        Ok(fk)
     }
 
     pub fn update_stable_solutions(
@@ -54,6 +60,7 @@ impl VvcmFk {
         formation: RobotFormation,
     ) -> Result<&FkSolutions, VvcmError> {
         self.validate_formation(&formation)?;
+        self.warn_if_unit_scale_looks_small(Some(&formation));
 
         self.solutions = FkSolutions::default();
         self.formation = Some(formation.clone());
@@ -105,6 +112,19 @@ impl VvcmFk {
         }
 
         Ok(())
+    }
+
+    fn warn_if_unit_scale_looks_small(&mut self, formation: Option<&RobotFormation>) {
+        if self.unit_warning_emitted {
+            return;
+        }
+
+        let Some(message) = unit_scale_warning(self.hold_height, &self.sheet, formation) else {
+            return;
+        };
+
+        eprintln!("{message}");
+        self.unit_warning_emitted = true;
     }
 
     fn find_candidate_solutions(
@@ -505,4 +525,104 @@ where
 
     let mut current = Vec::with_capacity(k);
     recurse(n, k, 0, &mut current, &mut visit);
+}
+
+fn unit_scale_warning(
+    hold_height: Scalar,
+    sheet: &SheetShape,
+    formation: Option<&RobotFormation>,
+) -> Option<String> {
+    let mut small_inputs = Vec::new();
+
+    if is_too_small_for_millimeters(hold_height.abs()) {
+        small_inputs.push(format!("hold_height={hold_height}"));
+    }
+
+    let sheet_span = point_span(sheet.vertices());
+    if is_too_small_for_millimeters(sheet_span) {
+        small_inputs.push(format!("sheet_span={sheet_span}"));
+    }
+
+    if let Some(formation) = formation {
+        let formation_span = point_span(formation.points());
+        if is_too_small_for_millimeters(formation_span) {
+            small_inputs.push(format!("formation_span={formation_span}"));
+        }
+    }
+
+    if small_inputs.is_empty() {
+        return None;
+    }
+
+    Some(format!(
+        "Warning: vvcm-rs input scale looks very small ({}). This library expects length values in millimeters; if your data is in meters, multiply lengths by 1000.0 before solving.",
+        small_inputs.join(", ")
+    ))
+}
+
+fn is_too_small_for_millimeters(value: Scalar) -> bool {
+    value.is_finite() && value < SMALL_INPUT_WARNING_THRESHOLD_MM
+}
+
+fn point_span(points: &[Point2]) -> Scalar {
+    let mut max_distance: Scalar = 0.0;
+
+    for i in 0..points.len() {
+        for j in (i + 1)..points.len() {
+            max_distance = max_distance.max(points[i].distance_to(points[j]));
+        }
+    }
+
+    max_distance
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unit_warning_is_none_for_millimeter_scale_inputs() {
+        let sheet = SheetShape::new(vec![
+            Point2::new(-316.1, -421.9),
+            Point2::new(803.4, -384.1),
+            Point2::new(746.1, 712.8),
+            Point2::new(-367.3, 664.2),
+        ])
+        .unwrap();
+        let formation = RobotFormation::new(vec![
+            Point2::new(213.7, 122.7),
+            Point2::new(804.6, 37.2),
+            Point2::new(904.0, 550.0),
+            Point2::new(439.3, 715.9),
+        ])
+        .unwrap();
+
+        assert!(unit_scale_warning(1000.0, &sheet, Some(&formation)).is_none());
+    }
+
+    #[test]
+    fn unit_warning_mentions_millimeters_for_meter_like_inputs() {
+        let sheet = SheetShape::new(vec![
+            Point2::new(-0.3161, -0.4219),
+            Point2::new(0.8034, -0.3841),
+            Point2::new(0.7461, 0.7128),
+            Point2::new(-0.3673, 0.6642),
+        ])
+        .unwrap();
+        let formation = RobotFormation::new(vec![
+            Point2::new(0.2137, 0.1227),
+            Point2::new(0.8046, 0.0372),
+            Point2::new(0.9040, 0.5500),
+            Point2::new(0.4393, 0.7159),
+        ])
+        .unwrap();
+
+        let warning = unit_scale_warning(1.0, &sheet, Some(&formation)).unwrap();
+
+        assert!(warning.contains("millimeters"));
+        assert!(warning.contains("meters"));
+        assert!(warning.contains("hold_height"));
+        assert!(warning.contains("sheet_span"));
+        assert!(warning.contains("formation_span"));
+    }
 }
