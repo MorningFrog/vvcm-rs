@@ -44,6 +44,12 @@ Run the basic forward-kinematics example:
 cargo run --example basic_fk
 ```
 
+Run the C++-style 20-robot timing fixture in release mode:
+
+```shell
+cargo run --release --example fk_timing
+```
+
 Example API shape:
 
 ```rust

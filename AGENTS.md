@@ -10,7 +10,7 @@ Read `CONTRIBUTING.md` before starting development work. It contains important d
 
 ## Documentation Updates
 
-When modifying code, also review `README.md` and `CONTRIBUTING.md` to determine whether they need to be updated.
+When modifying code, also review `README.md`, `AGENTS.md`, `CHANGELOG.md`, `TODO.md` and `CONTRIBUTING.md` to determine whether they need to be updated.
 
 Update these files when changes affect:
 
