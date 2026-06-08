@@ -18,3 +18,5 @@
 - Added a default-on release workflow `dry-run` input that validates builds,
   release notes, vcpkg packaging, and publishing credentials without creating a
   release.
+- Switched the PyPI release path from static API tokens to Trusted Publishing
+  with GitHub Actions OIDC.

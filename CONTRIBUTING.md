@@ -176,12 +176,13 @@ Before releasing, confirm that:
 
 The release workflow publishes to crates.io and PyPI, and creates a GitHub
 release asset that contains a source tree with the vcpkg overlay port. Configure
-these repository secrets before running it:
+the crates.io secret before running it, and add a PyPI Trusted Publisher for the
+GitHub Actions workflow plus the `pypi` environment in your PyPI project
+settings:
 
 | Secret                 | Purpose                         |
 | ---------------------- | ------------------------------- |
 | `CARGO_REGISTRY_TOKEN` | crates.io publishing token      |
-| `PYPI_API_TOKEN`       | PyPI project or account token   |
 
 Version numbers should follow Semantic Versioning:
 
@@ -210,15 +211,16 @@ The release process requires a manual run of the GitHub Actions workflow named "
 The workflow will:
 
 1. Verify that `Cargo.toml`, `pyproject.toml`, and `vcpkg/ports/vvcm-rs/vcpkg.json` use the same version.
-2. Check that the crates.io and PyPI secrets are configured. The workflow validates the crates.io token with the authenticated `/api/v1/me` endpoint and validates the PyPI token against the upload endpoint using an intentionally incomplete no-release form.
-3. Run Rust formatting, clippy, tests, and a crates.io dry run.
-4. Build and check the Python source distribution and wheel.
-5. Build the repo-local vcpkg overlay port.
-6. Generate and print the GitHub release notes from the top `CHANGELOG.md` unreleased section.
-7. When `dry-run` is `false`, create a new Git tag named `v<version>` from the version in `Cargo.toml`.
+2. Check that the crates.io secret is configured. The workflow validates the token with the authenticated `/api/v1/me` endpoint.
+3. When `dry-run` is `true`, validate the PyPI Trusted Publisher configuration by minting a short-lived OIDC-backed token without uploading anything.
+4. Run Rust formatting, clippy, tests, and a crates.io dry run.
+5. Build and check the Python source distribution and wheel.
+6. Build the repo-local vcpkg overlay port.
+7. Generate and print the GitHub release notes from the top `CHANGELOG.md` unreleased section.
 8. When `dry-run` is `false`, publish the Rust crate to crates.io.
-9. When `dry-run` is `false`, publish the Python distributions to PyPI.
-10. When `dry-run` is `false`, create a GitHub release and attach the Python distributions plus a vcpkg-ready source archive.
+9. When `dry-run` is `false`, publish the Python distributions to PyPI using `pypa/gh-action-pypi-publish`.
+10. When `dry-run` is `false`, create a new Git tag named `v<version>` from the version in `Cargo.toml`.
+11. When `dry-run` is `false`, create a GitHub release and attach the Python distributions plus a vcpkg-ready source archive.
 
 The vcpkg overlay port in `vcpkg/ports/vvcm-rs` is ready for local or release
 source-archive use. Publishing it to the official vcpkg registry requires a

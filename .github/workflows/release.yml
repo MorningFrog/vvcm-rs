@@ -9,17 +9,19 @@ on:
         default: true
         type: boolean
 
-permissions:
-  contents: write
-
 concurrency:
   group: release
   cancel-in-progress: false
 
 jobs:
-  release:
-    name: Publish packages
+  validate_release:
+    name: Validate release
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
     env:
       CARGO_TERM_COLOR: always
 
@@ -45,10 +47,9 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install --upgrade maturin twine pytest numpy
 
-      - name: Check release credentials
+      - name: Check crates.io credential
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-          PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
         run: |
           set -euo pipefail
 
@@ -57,21 +58,12 @@ jobs:
             exit 1
           fi
 
-          if [ -z "${PYPI_API_TOKEN:-}" ]; then
-            echo "::error title=Missing secret::PYPI_API_TOKEN is not configured."
-            exit 1
-          fi
-
           python - <<'PY'
           import os
 
           cargo_token = os.environ["CARGO_REGISTRY_TOKEN"]
-          pypi_token = os.environ["PYPI_API_TOKEN"]
-
           if len(cargo_token.strip()) < 20:
               raise SystemExit("CARGO_REGISTRY_TOKEN looks too short to be a usable crates.io token.")
-          if not pypi_token.startswith("pypi-"):
-              raise SystemExit("PYPI_API_TOKEN should start with 'pypi-'.")
           PY
 
           crates_status="$(
@@ -94,30 +86,6 @@ jobs:
             *)
               cat crates-credential-response.json
               echo "::error title=Unexpected crates.io response::Expected HTTP 200 from /api/v1/me, got ${crates_status}."
-              exit 1
-              ;;
-          esac
-
-          pypi_status="$(
-            curl --silent --show-error --output pypi-credential-response.txt --write-out "%{http_code}" \
-              --request POST "https://upload.pypi.org/legacy/" \
-              --user "__token__:${PYPI_API_TOKEN}" \
-              --form ":action=file_upload" \
-              --form "protocol_version=1"
-          )"
-
-          case "$pypi_status" in
-            400|422)
-              echo "PyPI accepted the token and rejected the intentionally incomplete dry-run upload form."
-              ;;
-            401|403)
-              cat pypi-credential-response.txt
-              echo "::error title=Invalid PyPI token::PYPI_API_TOKEN was rejected by PyPI."
-              exit 1
-              ;;
-            *)
-              cat pypi-credential-response.txt
-              echo "::error title=Unexpected PyPI response::Expected HTTP 400/422 for the incomplete form, got ${pypi_status}."
               exit 1
               ;;
           esac
@@ -230,41 +198,161 @@ jobs:
             cat release-notes.md
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Create git tag
-        if: ${{ !inputs['dry-run'] }}
+      - name: Upload Python distributions
+        uses: actions/upload-artifact@v7
+        with:
+          name: python-dist
+          path: python-dist/*
+          if-no-files-found: error
+
+      - name: Upload release assets
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-dist
+          path: release-dist/*
+          if-no-files-found: error
+
+      - name: Upload release notes
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-notes
+          path: release-notes.md
+          if-no-files-found: error
+
+  validate_pypi_trusted_publisher:
+    name: Validate PyPI Trusted Publisher
+    if: ${{ inputs['dry-run'] }}
+    needs: validate_release
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Mint PyPI token without uploading
         run: |
-          tag="${{ steps.version.outputs.tag }}"
+          set -euo pipefail
+
+          oidc_response="$(
+            curl --silent --show-error \
+              --header "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+              "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=pypi"
+          )"
+          oidc_token="$(jq -r '.value // empty' <<< "$oidc_response")"
+
+          if [ -z "$oidc_token" ]; then
+            echo "$oidc_response"
+            echo "::error title=OIDC token unavailable::GitHub did not return an OIDC token for PyPI."
+            exit 1
+          fi
+
+          OIDC_TOKEN="$oidc_token" python - <<'PY' > pypi-oidc-request.json
+          import json
+          import os
+
+          print(json.dumps({"token": os.environ["OIDC_TOKEN"]}))
+          PY
+
+          pypi_status="$(
+            curl --silent --show-error --output pypi-oidc-response.json --write-out "%{http_code}" \
+              --request POST "https://pypi.org/_/oidc/mint-token" \
+              --header "Content-Type: application/json" \
+              --data @pypi-oidc-request.json
+          )"
+
+          if [ "$pypi_status" != "200" ]; then
+            cat pypi-oidc-response.json
+            echo "::error title=PyPI Trusted Publisher rejected::Expected HTTP 200 from PyPI OIDC token minting, got ${pypi_status}."
+            exit 1
+          fi
+
+          api_token="$(jq -r '.token // empty' pypi-oidc-response.json)"
+          if [ -z "$api_token" ]; then
+            cat pypi-oidc-response.json
+            echo "::error title=PyPI token missing::PyPI did not return a short-lived token."
+            exit 1
+          fi
+
+          echo "::add-mask::$api_token"
+          echo "PyPI Trusted Publishing accepted this workflow identity. No upload was performed."
+          echo "## PyPI Trusted Publishing validated" >> "$GITHUB_STEP_SUMMARY"
+          echo "PyPI minted a short-lived token for this workflow identity. No upload was performed." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Finish dry run
+        run: |
+          echo "Dry run completed. No git tag, GitHub release, crates.io publish, or PyPI upload was created."
+          echo "## Dry run completed" >> "$GITHUB_STEP_SUMMARY"
+          echo "No git tag, GitHub release, crates.io publish, or PyPI upload was created." >> "$GITHUB_STEP_SUMMARY"
+
+  publish:
+    name: Publish release
+    if: ${{ !inputs['dry-run'] }}
+    needs: validate_release
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: write
+      id-token: write
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup show
+
+      - name: Download Python distributions
+        uses: actions/download-artifact@v8
+        with:
+          name: python-dist
+          path: python-dist
+
+      - name: Download release assets
+        uses: actions/download-artifact@v8
+        with:
+          name: release-dist
+          path: release-dist
+
+      - name: Download release notes
+        uses: actions/download-artifact@v8
+        with:
+          name: release-notes
+          path: release-notes
+
+      - name: Publish crate to crates.io
+        run: cargo publish --locked
+
+      - name: Publish Python distributions to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: python-dist
+
+      - name: Create git tag
+        run: |
+          tag="${{ needs.validate_release.outputs.tag }}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag -a "$tag" -m "Release $tag"
           git push origin "$tag"
 
-      - name: Publish crate to crates.io
-        if: ${{ !inputs['dry-run'] }}
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish --locked
-
-      - name: Publish Python distributions to PyPI
-        if: ${{ !inputs['dry-run'] }}
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-        run: python -m twine upload --non-interactive --skip-existing python-dist/*
-
       - name: Create GitHub release
-        if: ${{ !inputs['dry-run'] }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${{ steps.version.outputs.tag }}" release-dist/* \
+          gh release create "${{ needs.validate_release.outputs.tag }}" release-dist/* \
             --verify-tag \
-            --title "vvcm-rs ${{ steps.version.outputs.version }}" \
-            --notes-file release-notes.md
-
-      - name: Finish dry run
-        if: ${{ inputs['dry-run'] }}
-        run: |
-          echo "Dry run completed. No git tag, GitHub release, crates.io publish, or PyPI upload was created."
-          echo "## Dry run completed" >> "$GITHUB_STEP_SUMMARY"
-          echo "No git tag, GitHub release, crates.io publish, or PyPI upload was created." >> "$GITHUB_STEP_SUMMARY"
+            --title "vvcm-rs ${{ needs.validate_release.outputs.version }}" \
+            --notes-file release-notes/release-notes.md
