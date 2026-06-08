@@ -8,5 +8,7 @@ license = "Apache-2.0"
 repository = "https://github.com/morningfrog/vvcm-rs"
 
 [dependencies]
+cxx = "1.0.194"
 nalgebra = "0.35.0"
+pyo3 = "0.28.3"
 thiserror = "2.0.18"
