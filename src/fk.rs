@@ -1,12 +1,27 @@
+//! Forward-kinematics solver for the Virtual Variable Cables Model.
+//!
+//! A [`VvcmFk`] instance owns the fixed sheet geometry and solves repeated robot
+//! formations against it. Each update enumerates candidate taut cable sets,
+//! solves the corresponding constrained system, and marks locally stable
+//! branches in the returned [`FkSolutions`] collection.
+
 use crate::error::VvcmError;
 use crate::types::{FkSolution, FkSolutions, Point2, Point3, RobotFormation, Scalar, SheetShape};
 use nalgebra::{DMatrix, DVector};
 
+// Numerical thresholds mirror the tolerance-driven style of the original C++
+// implementation. They are intentionally local to the solver because changing
+// them affects branch enumeration and stability classification.
 const RANK_EPS: Scalar = 1.0e-4;
 const STABILITY_EPS: Scalar = 1.0e-8;
 const SLACK_EPS: Scalar = 1.0e-8;
 const SMALL_INPUT_WARNING_THRESHOLD_MM: Scalar = 10.0;
 
+/// Stateful forward-kinematics engine for a fixed deformable sheet.
+///
+/// The sheet geometry and robot count are fixed at construction time. Calling
+/// [`VvcmFk::update_stable_solutions`] replaces the current formation and
+/// solution cache with the result for the supplied formation.
 #[derive(Debug, Clone)]
 pub struct VvcmFk {
     robot_count: usize,
@@ -18,6 +33,23 @@ pub struct VvcmFk {
 }
 
 impl VvcmFk {
+    /// Creates a solver for `robot_count` robots holding `sheet` at
+    /// `hold_height`.
+    ///
+    /// `sheet` must contain exactly one vertex per robot, and each vertex must
+    /// be ordered to match the robot formation points passed to
+    /// [`VvcmFk::update_stable_solutions`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VvcmError::DimensionMismatch`] when `robot_count` is less than
+    /// three or when the sheet vertex count does not match `robot_count`.
+    ///
+    /// # Units
+    ///
+    /// Length units are not encoded in the type system. The reference
+    /// implementation and examples use millimeters, so inputs that look
+    /// meter-scaled emit a one-time warning to `stderr`.
     pub fn new(
         robot_count: usize,
         hold_height: Scalar,
@@ -52,6 +84,22 @@ impl VvcmFk {
         Ok(fk)
     }
 
+    /// Solves and stores the stable forward-kinematics branches for
+    /// `formation`.
+    ///
+    /// The formation must contain exactly one point per robot. This method
+    /// clears the previous solution cache before solving. If candidate
+    /// solutions are found but none are stable, the candidate list remains
+    /// available through [`VvcmFk::solutions`] with every
+    /// [`FkSolution::stable`] flag set to `false`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VvcmError::DimensionMismatch`] for a wrong formation size,
+    /// [`VvcmError::InfeasibleFormation`] when the formation stretches the
+    /// sheet beyond its pairwise distances, [`VvcmError::NoSolution`] when no
+    /// candidate branch can be constructed, or
+    /// [`VvcmError::NoStableSolution`] when every candidate is unstable.
     pub fn update_stable_solutions(
         &mut self,
         formation: RobotFormation,
@@ -79,26 +127,34 @@ impl VvcmFk {
         }
     }
 
+    /// Returns the fixed number of robots solved by this engine.
     pub fn robot_count(&self) -> usize {
         self.robot_count
     }
 
+    /// Returns the fixed robot holding height used to recover the object Z
+    /// coordinate.
     pub fn hold_height(&self) -> Scalar {
         self.hold_height
     }
 
+    /// Borrows the fixed sheet geometry.
     pub fn sheet(&self) -> &SheetShape {
         &self.sheet
     }
 
+    /// Borrows the most recent formation passed to
+    /// [`VvcmFk::update_stable_solutions`].
     pub fn current_formation(&self) -> Option<&RobotFormation> {
         self.formation.as_ref()
     }
 
+    /// Borrows the most recent solution cache.
     pub fn solutions(&self) -> &FkSolutions {
         &self.solutions
     }
 
+    /// Checks that a formation-like value has one point per robot.
     pub(crate) fn validate_formation(&self, formation: &RobotFormation) -> Result<(), VvcmError> {
         if formation.len() != self.robot_count {
             return Err(VvcmError::DimensionMismatch {
@@ -111,6 +167,8 @@ impl VvcmFk {
         Ok(())
     }
 
+    /// Emits a single unit-scale warning when inputs look smaller than the
+    /// millimeter-scale reference data.
     fn warn_if_unit_scale_looks_small(&mut self, formation: Option<&RobotFormation>) {
         if self.unit_warning_emitted {
             return;
@@ -124,6 +182,7 @@ impl VvcmFk {
         self.unit_warning_emitted = true;
     }
 
+    /// Enumerates taut cable subsets and solves every feasible candidate branch.
     fn find_candidate_solutions(
         &self,
         formation: &RobotFormation,
@@ -135,6 +194,9 @@ impl VvcmFk {
         }
 
         let mut candidates = Vec::new();
+        // The port currently mirrors the C++ solver's practical search bound:
+        // at least three taut cables are required to locate the object, while
+        // more than five taut cables are not needed for the supported cases.
         let max_taut_count = self.robot_count.min(5);
 
         for taut_count in 3..=max_taut_count {
@@ -152,6 +214,7 @@ impl VvcmFk {
         }
     }
 
+    /// Solves one candidate branch for a chosen taut cable set.
     fn solve_for_taut_set(
         &self,
         problem: &ProblemData,
@@ -160,6 +223,9 @@ impl VvcmFk {
         let taut_count = taut_cables.len();
         let id1 = taut_cables[0];
 
+        // Every cable length equation is expressed relative to the first taut
+        // cable. Taut rows form the equality system; non-taut rows are reused
+        // later as strict slack checks.
         let row_count = self.robot_count - 1;
         let mut a = DMatrix::<Scalar>::zeros(row_count, 4);
         let mut b = DVector::<Scalar>::zeros(row_count);
@@ -183,6 +249,8 @@ impl VvcmFk {
         let b1 = b.rows(0, constraint_count).into_owned();
         let a1_bar = append_column(&a1, &b1);
 
+        // Reject inconsistent taut equality systems before building the
+        // Lagrange system.
         if matrix_rank(&a1) != matrix_rank(&a1_bar) {
             return None;
         }
@@ -197,6 +265,8 @@ impl VvcmFk {
         ];
         let f0 = problem.formation_norm_squared[id1] - problem.sheet_norm_squared[id1];
 
+        // The Lagrange solve returns the stationary point for the four planar
+        // unknowns: object XY and virtual-object XY.
         let solution = solve_lagrange_system(c, &a1, &b1)?;
         let x_bar = solution.rows(0, 4).into_owned();
         let lambda_raw = solution
@@ -209,6 +279,8 @@ impl VvcmFk {
         let term2 = c[0] * x_bar[0] + c[1] * x_bar[1] + c[2] * x_bar[2] + c[3] * x_bar[3];
         let tmp = -(term1 + term2 + f0);
 
+        // `tmp` is the squared vertical drop from the robot holding plane. A
+        // negative value has no real-valued object height.
         if tmp < 0.0 {
             return None;
         }
@@ -227,6 +299,7 @@ impl VvcmFk {
             return None;
         }
 
+        // Slack cables must remain strictly slack for this taut-set hypothesis.
         for row in constraint_count..row_count {
             let residual = b[row]
                 - (a[(row, 0)] * x_bar[0]
@@ -253,6 +326,7 @@ impl VvcmFk {
     }
 }
 
+/// Candidate solution plus intermediate values needed by stability filtering.
 #[derive(Debug, Clone)]
 struct CandidateSolution {
     solution: FkSolution,
@@ -262,6 +336,7 @@ struct CandidateSolution {
     omega: Option<DMatrix<Scalar>>,
 }
 
+/// Precomputed coordinates and pairwise constraint rows for one FK update.
 #[derive(Debug, Clone)]
 struct ProblemData {
     formation_x: Vec<Scalar>,
@@ -274,6 +349,7 @@ struct ProblemData {
 }
 
 impl ProblemData {
+    /// Builds cached coordinate arrays and all pairwise linear constraints.
     fn new(formation: &RobotFormation, sheet: &SheetShape) -> Self {
         let point_count = formation.len();
         let mut formation_x = Vec::with_capacity(point_count);
@@ -295,6 +371,8 @@ impl ProblemData {
         }
 
         let mut constraint_rows = Vec::with_capacity(point_count * point_count);
+        // The constraint row for (id1, id) is the linearized difference between
+        // the two cable-length equations.
         for id1 in 0..point_count {
             for id in 0..point_count {
                 constraint_rows.push(ConstraintRow {
@@ -323,21 +401,26 @@ impl ProblemData {
         }
     }
 
+    /// Returns the number of robots/sheet vertices in the cached problem.
     fn len(&self) -> usize {
         self.formation_x.len()
     }
 
+    /// Returns the precomputed constraint row comparing cable `id` with
+    /// reference cable `id1`.
     fn constraint_row(&self, id1: usize, id: usize) -> ConstraintRow {
         self.constraint_rows[id1 * self.len() + id]
     }
 }
 
+/// Linear constraint coefficients for one pairwise cable comparison.
 #[derive(Debug, Clone, Copy)]
 struct ConstraintRow {
     a: [Scalar; 4],
     b: Scalar,
 }
 
+/// Checks the necessary pairwise-distance condition for sheet reachability.
 fn formation_feasible(problem: &ProblemData) -> bool {
     for i in 0..problem.len() {
         for j in 0..problem.len() {
@@ -363,12 +446,14 @@ fn formation_feasible(problem: &ProblemData) -> bool {
     true
 }
 
+/// Computes the Euclidean distance between two XY coordinates.
 fn point_distance(x1: Scalar, y1: Scalar, x2: Scalar, y2: Scalar) -> Scalar {
     let dx = x1 - x2;
     let dy = y1 - y2;
     (dx * dx + dy * dy).sqrt()
 }
 
+/// Copies one cached pairwise constraint into the dense solve buffers.
 fn fill_constraint_row(
     problem: &ProblemData,
     id1: usize,
@@ -385,6 +470,7 @@ fn fill_constraint_row(
     b[row] = constraint.b;
 }
 
+/// Returns a new matrix with `column` appended as the final column.
 fn append_column(matrix: &DMatrix<Scalar>, column: &DVector<Scalar>) -> DMatrix<Scalar> {
     let mut out = DMatrix::<Scalar>::zeros(matrix.nrows(), matrix.ncols() + 1);
 
@@ -398,6 +484,7 @@ fn append_column(matrix: &DMatrix<Scalar>, column: &DVector<Scalar>) -> DMatrix<
     out
 }
 
+/// Computes numerical matrix rank using singular values and [`RANK_EPS`].
 fn matrix_rank(matrix: &DMatrix<Scalar>) -> usize {
     if matrix.is_empty() {
         return 0;
@@ -406,6 +493,7 @@ fn matrix_rank(matrix: &DMatrix<Scalar>) -> usize {
     matrix.clone().svd(false, false).rank(RANK_EPS)
 }
 
+/// Solves the KKT/Lagrange system for object XY and virtual-object XY.
 fn solve_lagrange_system(
     c: [Scalar; 4],
     a11: &DMatrix<Scalar>,
@@ -442,6 +530,8 @@ fn solve_lagrange_system(
         .or_else(|| lagrange_matrix.svd(true, true).solve(&rhs, RANK_EPS).ok())
 }
 
+/// Expands the Lagrange multipliers so the reference taut cable has an explicit
+/// coefficient.
 fn expand_lambda(lambda_raw: &DVector<Scalar>) -> DVector<Scalar> {
     let mut lambda = DVector::<Scalar>::zeros(lambda_raw.len() + 1);
     lambda[0] = (2.0 - lambda_raw.sum()) / 2.0;
@@ -453,6 +543,7 @@ fn expand_lambda(lambda_raw: &DVector<Scalar>) -> DVector<Scalar> {
     lambda
 }
 
+/// Tests whether a point lies inside a polygon with the ray-casting rule.
 fn in_polygon(point: Point2, polygon: &[Point2]) -> bool {
     let mut inside = false;
     let mut j = polygon.len() - 1;
@@ -473,12 +564,14 @@ fn in_polygon(point: Point2, polygon: &[Point2]) -> bool {
     inside
 }
 
+/// Updates every candidate's stable flag in place.
 fn mark_stable_solutions(candidates: &mut [CandidateSolution]) {
     for candidate in candidates {
         candidate.solution.stable = is_locally_minimal(candidate);
     }
 }
 
+/// Applies the local-minimality stability test for one candidate branch.
 fn is_locally_minimal(candidate: &CandidateSolution) -> bool {
     if candidate
         .lambda
@@ -488,6 +581,10 @@ fn is_locally_minimal(candidate: &CandidateSolution) -> bool {
         return true;
     }
 
+    // Degenerate taut sets need a basis transform (`omega`) to search for a
+    // non-negative multiplier representation. Non-degenerate candidates already
+    // returned above, so a missing transform means this candidate is unstable in
+    // the current port.
     let Some(omega) = &candidate.omega else {
         return false;
     };
@@ -524,6 +621,7 @@ fn is_locally_minimal(candidate: &CandidateSolution) -> bool {
     locally_minimal
 }
 
+/// Solves a square linear system with LU first and SVD as a fallback.
 fn solve_square_system(matrix: &DMatrix<Scalar>, rhs: &DVector<Scalar>) -> Option<DVector<Scalar>> {
     matrix
         .clone()
@@ -532,6 +630,7 @@ fn solve_square_system(matrix: &DMatrix<Scalar>, rhs: &DVector<Scalar>) -> Optio
         .or_else(|| matrix.clone().svd(true, true).solve(rhs, RANK_EPS).ok())
 }
 
+/// Enumerates all `k`-element index combinations from `0..n`.
 fn enumerate_combinations<F>(n: usize, k: usize, mut visit: F)
 where
     F: FnMut(&[usize]),
@@ -561,6 +660,8 @@ where
     recurse(n, k, 0, &mut current, &mut visit);
 }
 
+/// Builds a warning message when inputs look meter-scaled instead of
+/// millimeter-scaled.
 fn unit_scale_warning(
     hold_height: Scalar,
     sheet: &SheetShape,
@@ -594,10 +695,13 @@ fn unit_scale_warning(
     ))
 }
 
+/// Returns `true` when `value` is finite and below the millimeter-scale
+/// heuristic threshold.
 fn is_too_small_for_millimeters(value: Scalar) -> bool {
     value.is_finite() && value < SMALL_INPUT_WARNING_THRESHOLD_MM
 }
 
+/// Returns the largest pairwise distance among a point set.
 fn point_span(points: &[Point2]) -> Scalar {
     let mut max_distance: Scalar = 0.0;
 

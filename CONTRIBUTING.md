@@ -81,6 +81,7 @@ Code requirements:
 
 * Use clear and meaningful names
 * Avoid unnecessary abbreviations
+* Add Rustdoc comments for public API items
 * Avoid unrelated changes in the same commit
 * Remove unused code and debug logs
 * Keep functions focused on a single responsibility

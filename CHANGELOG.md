@@ -8,3 +8,4 @@
 - Added a release-friendly FK timing example based on the C++ 20-robot fixture.
 - Completed `VvcmSimulation` and `VvcmManualSimulation` behavior.
 - Optimized the `VvcmFk` hot path by reusing precomputed point data and removing unused per-candidate work.
+- Documented the public Rust API and key internal FK/simulation steps.
