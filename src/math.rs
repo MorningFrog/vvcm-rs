@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use nalgebra::DMatrix;
 
 use crate::types::{Point2, RobotFormation, Scalar, SheetShape};

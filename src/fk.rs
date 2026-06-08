@@ -1,5 +1,4 @@
 use crate::error::VvcmError;
-use crate::math;
 use crate::types::{FkSolution, FkSolutions, Point2, Point3, RobotFormation, Scalar, SheetShape};
 use nalgebra::{DMatrix, DVector};
 
@@ -39,8 +38,6 @@ impl VvcmFk {
                 actual: sheet.len(),
             });
         }
-
-        let _sheet_matrix = math::sheet_to_matrix(&sheet);
 
         let mut fk = Self {
             robot_count,
@@ -131,10 +128,9 @@ impl VvcmFk {
         &self,
         formation: &RobotFormation,
     ) -> Result<Vec<CandidateSolution>, VvcmError> {
-        let formation_matrix = math::formation_to_matrix(formation);
-        let sheet_matrix = math::sheet_to_matrix(&self.sheet);
+        let problem = ProblemData::new(formation, &self.sheet);
 
-        if !formation_feasible(&formation_matrix, &sheet_matrix) {
+        if !formation_feasible(&problem) {
             return Err(VvcmError::InfeasibleFormation);
         }
 
@@ -143,9 +139,7 @@ impl VvcmFk {
 
         for taut_count in 3..=max_taut_count {
             enumerate_combinations(self.robot_count, taut_count, |taut_cables| {
-                if let Some(candidate) =
-                    self.solve_for_taut_set(&formation_matrix, &sheet_matrix, taut_cables)
-                {
+                if let Some(candidate) = self.solve_for_taut_set(&problem, taut_cables) {
                     candidates.push(candidate);
                 }
             });
@@ -160,40 +154,28 @@ impl VvcmFk {
 
     fn solve_for_taut_set(
         &self,
-        formation: &DMatrix<Scalar>,
-        sheet: &DMatrix<Scalar>,
+        problem: &ProblemData,
         taut_cables: &[usize],
     ) -> Option<CandidateSolution> {
         let taut_count = taut_cables.len();
-        let slack_cables = slack_cables(self.robot_count, taut_cables);
-        let slack_count = slack_cables.len();
         let id1 = taut_cables[0];
 
-        let mut id2_to_n = Vec::with_capacity(taut_count - 1 + slack_count);
-        id2_to_n.extend_from_slice(&taut_cables[1..]);
-        id2_to_n.extend_from_slice(&slack_cables);
-
-        let row_count = id2_to_n.len();
+        let row_count = self.robot_count - 1;
         let mut a = DMatrix::<Scalar>::zeros(row_count, 4);
         let mut b = DVector::<Scalar>::zeros(row_count);
 
-        let x1 = formation[(id1, 0)];
-        let y1 = formation[(id1, 1)];
-        let xv1 = sheet[(id1, 0)];
-        let yv1 = sheet[(id1, 1)];
+        for (row, &id) in taut_cables[1..].iter().enumerate() {
+            fill_constraint_row(problem, id1, id, row, &mut a, &mut b);
+        }
 
-        for (row, &id) in id2_to_n.iter().enumerate() {
-            let x = formation[(id, 0)];
-            let y = formation[(id, 1)];
-            let xv = sheet[(id, 0)];
-            let yv = sheet[(id, 1)];
+        let mut slack_row = 0;
+        for id in 0..self.robot_count {
+            if taut_cables.contains(&id) {
+                continue;
+            }
 
-            a[(row, 0)] = x1 - x;
-            a[(row, 1)] = y1 - y;
-            a[(row, 2)] = xv - xv1;
-            a[(row, 3)] = yv - yv1;
-            b[row] = 0.5
-                * (x1 * x1 + y1 * y1 - xv1 * xv1 - yv1 * yv1 + xv * xv + yv * yv - x * x - y * y);
+            fill_constraint_row(problem, id1, id, taut_count - 1 + slack_row, &mut a, &mut b);
+            slack_row += 1;
         }
 
         let constraint_count = taut_count - 1;
@@ -205,34 +187,26 @@ impl VvcmFk {
             return None;
         }
 
-        let r = a1_bar.clone().qr().r();
-        let c_matrix = diagonal_scaling_from_qr_r(&r, constraint_count);
         let independent_taut_count = constraint_count + 1;
-        let omega = build_omega(&c_matrix, independent_taut_count, taut_count);
 
-        let q = DMatrix::<Scalar>::from_row_slice(
-            4,
-            4,
-            &[
-                2.0, 0.0, 0.0, 0.0, //
-                0.0, 2.0, 0.0, 0.0, //
-                0.0, 0.0, -2.0, 0.0, //
-                0.0, 0.0, 0.0, -2.0,
-            ],
-        );
-        let c = DVector::<Scalar>::from_vec(vec![-2.0 * x1, -2.0 * y1, 2.0 * xv1, 2.0 * yv1]);
-        let f0 = x1 * x1 + y1 * y1 - xv1 * xv1 - yv1 * yv1;
+        let c = [
+            -2.0 * problem.formation_x[id1],
+            -2.0 * problem.formation_y[id1],
+            2.0 * problem.sheet_x[id1],
+            2.0 * problem.sheet_y[id1],
+        ];
+        let f0 = problem.formation_norm_squared[id1] - problem.sheet_norm_squared[id1];
 
-        let solution = solve_lagrange_system(&q, &c, &a1, &b1)?;
+        let solution = solve_lagrange_system(c, &a1, &b1)?;
         let x_bar = solution.rows(0, 4).into_owned();
         let lambda_raw = solution
             .rows(solution.len() - constraint_count, constraint_count)
             .into_owned();
         let lambda = expand_lambda(&lambda_raw);
 
-        let q_x = &q * &x_bar;
-        let term1 = 0.5 * x_bar.dot(&q_x);
-        let term2 = c.dot(&x_bar);
+        let term1 =
+            x_bar[0] * x_bar[0] + x_bar[1] * x_bar[1] - x_bar[2] * x_bar[2] - x_bar[3] * x_bar[3];
+        let term2 = c[0] * x_bar[0] + c[1] * x_bar[1] + c[2] * x_bar[2] + c[3] * x_bar[3];
         let tmp = -(term1 + term2 + f0);
 
         if tmp < 0.0 {
@@ -247,16 +221,19 @@ impl VvcmFk {
 
         let taut_polygon: Vec<Point2> = taut_cables
             .iter()
-            .map(|&idx| Point2::new(formation[(idx, 0)], formation[(idx, 1)]))
+            .map(|&idx| Point2::new(problem.formation_x[idx], problem.formation_y[idx]))
             .collect();
         if !in_polygon(Point2::new(x_o, y_o), &taut_polygon) {
             return None;
         }
 
-        if slack_count > 0 {
-            let residual = b.rows(constraint_count, slack_count).into_owned()
-                - a.rows(constraint_count, slack_count).into_owned() * &x_bar;
-            if residual.min() <= SLACK_EPS {
+        for row in constraint_count..row_count {
+            let residual = b[row]
+                - (a[(row, 0)] * x_bar[0]
+                    + a[(row, 1)] * x_bar[1]
+                    + a[(row, 2)] * x_bar[2]
+                    + a[(row, 3)] * x_bar[3]);
+            if residual <= SLACK_EPS {
                 return None;
             }
         }
@@ -271,7 +248,7 @@ impl VvcmFk {
             taut_count,
             independent_taut_count,
             lambda,
-            omega: (taut_count != independent_taut_count).then_some(omega),
+            omega: None,
         })
     }
 }
@@ -285,11 +262,97 @@ struct CandidateSolution {
     omega: Option<DMatrix<Scalar>>,
 }
 
-fn formation_feasible(formation: &DMatrix<Scalar>, sheet: &DMatrix<Scalar>) -> bool {
-    for i in 0..formation.nrows() {
-        for j in 0..formation.nrows() {
-            let formation_distance = row_distance(formation, i, j);
-            let sheet_distance = row_distance(sheet, i, j);
+#[derive(Debug, Clone)]
+struct ProblemData {
+    formation_x: Vec<Scalar>,
+    formation_y: Vec<Scalar>,
+    formation_norm_squared: Vec<Scalar>,
+    sheet_x: Vec<Scalar>,
+    sheet_y: Vec<Scalar>,
+    sheet_norm_squared: Vec<Scalar>,
+    constraint_rows: Vec<ConstraintRow>,
+}
+
+impl ProblemData {
+    fn new(formation: &RobotFormation, sheet: &SheetShape) -> Self {
+        let point_count = formation.len();
+        let mut formation_x = Vec::with_capacity(point_count);
+        let mut formation_y = Vec::with_capacity(point_count);
+        let mut formation_norm_squared = Vec::with_capacity(point_count);
+        let mut sheet_x = Vec::with_capacity(point_count);
+        let mut sheet_y = Vec::with_capacity(point_count);
+        let mut sheet_norm_squared = Vec::with_capacity(point_count);
+
+        for (formation_point, sheet_point) in formation.points().iter().zip(sheet.vertices()) {
+            formation_x.push(formation_point.x);
+            formation_y.push(formation_point.y);
+            formation_norm_squared.push(
+                formation_point.x * formation_point.x + formation_point.y * formation_point.y,
+            );
+            sheet_x.push(sheet_point.x);
+            sheet_y.push(sheet_point.y);
+            sheet_norm_squared.push(sheet_point.x * sheet_point.x + sheet_point.y * sheet_point.y);
+        }
+
+        let mut constraint_rows = Vec::with_capacity(point_count * point_count);
+        for id1 in 0..point_count {
+            for id in 0..point_count {
+                constraint_rows.push(ConstraintRow {
+                    a: [
+                        formation_x[id1] - formation_x[id],
+                        formation_y[id1] - formation_y[id],
+                        sheet_x[id] - sheet_x[id1],
+                        sheet_y[id] - sheet_y[id1],
+                    ],
+                    b: 0.5
+                        * (formation_norm_squared[id1] - sheet_norm_squared[id1]
+                            + sheet_norm_squared[id]
+                            - formation_norm_squared[id]),
+                });
+            }
+        }
+
+        Self {
+            formation_x,
+            formation_y,
+            formation_norm_squared,
+            sheet_x,
+            sheet_y,
+            sheet_norm_squared,
+            constraint_rows,
+        }
+    }
+
+    fn len(&self) -> usize {
+        self.formation_x.len()
+    }
+
+    fn constraint_row(&self, id1: usize, id: usize) -> ConstraintRow {
+        self.constraint_rows[id1 * self.len() + id]
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ConstraintRow {
+    a: [Scalar; 4],
+    b: Scalar,
+}
+
+fn formation_feasible(problem: &ProblemData) -> bool {
+    for i in 0..problem.len() {
+        for j in 0..problem.len() {
+            let formation_distance = point_distance(
+                problem.formation_x[i],
+                problem.formation_y[i],
+                problem.formation_x[j],
+                problem.formation_y[j],
+            );
+            let sheet_distance = point_distance(
+                problem.sheet_x[i],
+                problem.sheet_y[i],
+                problem.sheet_x[j],
+                problem.sheet_y[j],
+            );
 
             if formation_distance > sheet_distance {
                 return false;
@@ -300,16 +363,26 @@ fn formation_feasible(formation: &DMatrix<Scalar>, sheet: &DMatrix<Scalar>) -> b
     true
 }
 
-fn row_distance(matrix: &DMatrix<Scalar>, i: usize, j: usize) -> Scalar {
-    let dx = matrix[(i, 0)] - matrix[(j, 0)];
-    let dy = matrix[(i, 1)] - matrix[(j, 1)];
+fn point_distance(x1: Scalar, y1: Scalar, x2: Scalar, y2: Scalar) -> Scalar {
+    let dx = x1 - x2;
+    let dy = y1 - y2;
     (dx * dx + dy * dy).sqrt()
 }
 
-fn slack_cables(robot_count: usize, taut_cables: &[usize]) -> Vec<usize> {
-    (0..robot_count)
-        .filter(|candidate| !taut_cables.contains(candidate))
-        .collect()
+fn fill_constraint_row(
+    problem: &ProblemData,
+    id1: usize,
+    id: usize,
+    row: usize,
+    a: &mut DMatrix<Scalar>,
+    b: &mut DVector<Scalar>,
+) {
+    let constraint = problem.constraint_row(id1, id);
+    a[(row, 0)] = constraint.a[0];
+    a[(row, 1)] = constraint.a[1];
+    a[(row, 2)] = constraint.a[2];
+    a[(row, 3)] = constraint.a[3];
+    b[row] = constraint.b;
 }
 
 fn append_column(matrix: &DMatrix<Scalar>, column: &DVector<Scalar>) -> DMatrix<Scalar> {
@@ -333,49 +406,13 @@ fn matrix_rank(matrix: &DMatrix<Scalar>) -> usize {
     matrix.clone().svd(false, false).rank(RANK_EPS)
 }
 
-fn diagonal_scaling_from_qr_r(r: &DMatrix<Scalar>, size: usize) -> DMatrix<Scalar> {
-    let mut c_matrix = DMatrix::<Scalar>::identity(size, size);
-
-    for i in 0..size {
-        let diagonal = r[(i, i)];
-        if diagonal != 0.0 {
-            c_matrix[(i, i)] /= diagonal;
-        }
-    }
-
-    c_matrix
-}
-
-fn build_omega(
-    c_matrix: &DMatrix<Scalar>,
-    independent_taut_count: usize,
-    taut_count: usize,
-) -> DMatrix<Scalar> {
-    let mut omega = DMatrix::<Scalar>::zeros(independent_taut_count, taut_count);
-    omega[(0, 0)] = 1.0;
-
-    for col in 1..taut_count {
-        let c_col = col - 1;
-        let mut col_sum = 0.0;
-
-        for row in 0..(independent_taut_count - 1) {
-            let value = c_matrix[(row, c_col)];
-            col_sum += value;
-            omega[(row + 1, col)] = value;
-        }
-
-        omega[(0, col)] = 1.0 - col_sum;
-    }
-
-    omega
-}
-
 fn solve_lagrange_system(
-    q: &DMatrix<Scalar>,
-    c: &DVector<Scalar>,
+    c: [Scalar; 4],
     a11: &DMatrix<Scalar>,
     b11: &DVector<Scalar>,
 ) -> Option<DVector<Scalar>> {
+    const Q_DIAGONAL: [Scalar; 4] = [2.0, 2.0, -2.0, -2.0];
+
     let lagrange_size = 8;
     let constraint_count = a11.nrows();
     let constraint_start = lagrange_size - constraint_count;
@@ -384,10 +421,7 @@ fn solve_lagrange_system(
 
     for row in 0..4 {
         rhs[row] = -c[row];
-
-        for col in 0..4 {
-            lagrange_matrix[(row, col)] = q[(row, col)];
-        }
+        lagrange_matrix[(row, row)] = Q_DIAGONAL[row];
     }
 
     for constraint in 0..constraint_count {
