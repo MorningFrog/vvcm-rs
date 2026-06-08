@@ -4,8 +4,38 @@ Rust implementation of the Virtual Variable Cables Model (VVCM) forward
 kinematics algorithm for multi-robot transportation with a deformable sheet.
 
 This crate is intended to become a Rust implementation of the existing C++ VVCM
-library. The forward kinematics core is implemented in Rust; simulation wrappers
-are still being filled out.
+library. The forward kinematics core and simulation wrappers are implemented in
+Rust.
+
+## Citation
+
+If you use the forward kinematics algorithm, please cite:
+
+```bibtex
+@article{ma2026stable,
+  title = {Stable Kinematics for Multi-Robot Collaborative Transporting System with a Deformable Sheet},
+  author = {Ma, Wenyao and Hu, Jiawei and Li, Jiamao and Yi, Jingang and Xiong, Zhenhua},
+  year = 2026,
+  journal = {IEEE Transactions on Robotics},
+  volume = {42},
+  pages = {837-853},
+  doi = {10.1109/TRO.2026.3653870}
+}
+```
+
+For the original VVCM model, please cite:
+
+```bibtex
+@article{hu2022multirobot,
+  title = {Multi-Robot Object Transport Motion Planning With a Deformable Sheet},
+  author = {Hu, Jiawei and Liu, Wenhang and Zhang, Heng and Yi, Jingang and Xiong, Zhenhua},
+  year = 2022,
+  journal = {IEEE Robotics and Automation Letters},
+  volume = {7},
+  number = {4},
+  pages = {9350--9357}
+}
+```
 
 ## Current Status
 
@@ -18,8 +48,10 @@ are still being filled out.
   interface.
 - `VvcmFk::update_stable_solutions` enumerates taut cable sets, solves candidate
   forward-kinematics states, and marks stable solutions.
-- Simulation wrappers are scaffolded, but velocity-driven numerical updates are
-  not yet complete.
+- `VvcmSimulation` integrates robot velocities over a fixed time step and keeps
+  the closest stable FK branch.
+- `VvcmManualSimulation` returns the closest stable FK branch for externally
+  supplied robot formations.
 
 ## Module Overview
 
@@ -85,35 +117,4 @@ millimeters before solving, for example by multiplying lengths by `1000.0`.
 ## Porting Roadmap
 
 1. Broaden numerical regression tests against additional C++ examples.
-2. Complete `VvcmSimulation` and `VvcmManualSimulation` behavior.
-3. Expand documentation for algorithm details and expected numeric tolerances.
-
-## Citation
-
-If you use the forward kinematics algorithm, please cite:
-
-```bibtex
-@article{ma2026stable,
-  title = {Stable Kinematics for Multi-Robot Collaborative Transporting System with a Deformable Sheet},
-  author = {Ma, Wenyao and Hu, Jiawei and Li, Jiamao and Yi, Jingang and Xiong, Zhenhua},
-  year = 2026,
-  journal = {IEEE Transactions on Robotics},
-  volume = {42},
-  pages = {837-853},
-  doi = {10.1109/TRO.2026.3653870}
-}
-```
-
-For the original VVCM model, please cite:
-
-```bibtex
-@article{hu2022multirobot,
-  title = {Multi-Robot Object Transport Motion Planning With a Deformable Sheet},
-  author = {Hu, Jiawei and Liu, Wenhang and Zhang, Heng and Yi, Jingang and Xiong, Zhenhua},
-  year = 2022,
-  journal = {IEEE Robotics and Automation Letters},
-  volume = {7},
-  number = {4},
-  pages = {9350--9357}
-}
-```
+2. Expand documentation for algorithm details and expected numeric tolerances.

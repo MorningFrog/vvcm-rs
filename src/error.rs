@@ -17,7 +17,4 @@ pub enum VvcmError {
         expected: usize,
         actual: usize,
     },
-
-    #[error("VVCM algorithm is not implemented yet")]
-    NotImplemented,
 }

@@ -1,6 +1,6 @@
 use crate::error::VvcmError;
 use crate::fk::VvcmFk;
-use crate::types::{FkSolution, FkSolutions, Point2, Point3, RobotFormation, Scalar, SheetShape};
+use crate::types::{Point2, Point3, RobotFormation, Scalar, SheetShape};
 
 #[derive(Debug, Clone)]
 pub struct VvcmManualSimulation {
@@ -73,6 +73,11 @@ impl VvcmManualSimulation {
         self.object_position
     }
 
+    pub fn absolute_object_position(&self) -> Option<Point3> {
+        self.object_position
+            .map(|position| position.translated_xy_by(self.global_position))
+    }
+
     pub fn taut_cables(&self) -> &[usize] {
         &self.taut_cables
     }
@@ -87,8 +92,9 @@ impl VvcmManualSimulation {
         reference: Point3,
     ) -> Result<Point3, VvcmError> {
         let solutions = self.fk_engine.update_stable_solutions(local_formation)?;
-        let (solution_index, solution) =
-            closest_stable_solution(solutions, reference).ok_or(VvcmError::NoStableSolution)?;
+        let (solution_index, solution) = solutions
+            .closest_stable_to(reference)
+            .ok_or(VvcmError::NoStableSolution)?;
 
         self.solution_index = Some(solution_index);
         self.object_position = Some(solution.po);
@@ -96,19 +102,4 @@ impl VvcmManualSimulation {
 
         Ok(solution.po.translated_xy_by(self.global_position))
     }
-}
-
-fn closest_stable_solution(
-    solutions: &FkSolutions,
-    reference: Point3,
-) -> Option<(usize, &FkSolution)> {
-    solutions
-        .iter()
-        .enumerate()
-        .filter(|(_, solution)| solution.stable)
-        .min_by(|(_, left), (_, right)| {
-            left.po
-                .distance_to(reference)
-                .total_cmp(&right.po.distance_to(reference))
-        })
 }

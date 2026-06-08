@@ -23,21 +23,23 @@ impl VvcmSimulation {
         po_initial: Point3,
         dt: Scalar,
     ) -> Result<Self, VvcmError> {
-        let fk_engine = VvcmFk::new(robot_count, hold_height, sheet)?;
+        let mut fk_engine = VvcmFk::new(robot_count, hold_height, sheet)?;
         fk_engine.validate_formation(&initial_formation)?;
 
         let global_position = initial_formation.points()[0];
         let formation = initial_formation.relative_to(global_position);
-        let object_position = po_initial.relative_xy_to(global_position);
+        let reference = po_initial.relative_xy_to(global_position);
         let velocity = RobotFormation::zeros(robot_count)?;
+        let (solution_index, object_position, taut_cables) =
+            solve_closest_stable(&mut fk_engine, formation.clone(), reference)?;
 
         Ok(Self {
             fk_engine,
             global_position,
             formation,
             object_position,
-            taut_cables: Vec::new(),
-            solution_index: None,
+            taut_cables,
+            solution_index: Some(solution_index),
             dt,
             velocity,
         })
@@ -70,14 +72,24 @@ impl VvcmSimulation {
             .collect();
         self.formation = RobotFormation::new(points)?;
 
-        self.fk_engine
-            .update_stable_solutions(self.formation.clone())?;
+        let (solution_index, object_position, taut_cables) = solve_closest_stable(
+            &mut self.fk_engine,
+            self.formation.clone(),
+            self.object_position,
+        )?;
+        self.solution_index = Some(solution_index);
+        self.object_position = object_position;
+        self.taut_cables = taut_cables;
 
-        Err(VvcmError::NotImplemented)
+        Ok(())
     }
 
     pub fn absolute_formation(&self) -> RobotFormation {
         self.formation.translated_by(self.global_position)
+    }
+
+    pub fn absolute_object_position(&self) -> Point3 {
+        self.object_position.translated_xy_by(self.global_position)
     }
 
     pub fn fk_engine(&self) -> &VvcmFk {
@@ -111,4 +123,17 @@ impl VvcmSimulation {
     pub fn velocity(&self) -> &RobotFormation {
         &self.velocity
     }
+}
+
+fn solve_closest_stable(
+    fk_engine: &mut VvcmFk,
+    formation: RobotFormation,
+    reference: Point3,
+) -> Result<(usize, Point3, Vec<usize>), VvcmError> {
+    let solutions = fk_engine.update_stable_solutions(formation)?;
+    let (solution_index, solution) = solutions
+        .closest_stable_to(reference)
+        .ok_or(VvcmError::NoStableSolution)?;
+
+    Ok((solution_index, solution.po, solution.taut_cables.clone()))
 }

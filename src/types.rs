@@ -222,6 +222,17 @@ impl FkSolutions {
         self.solutions.iter().filter(|solution| solution.stable)
     }
 
+    pub fn closest_stable_to(&self, reference: Point3) -> Option<(usize, &FkSolution)> {
+        self.iter()
+            .enumerate()
+            .filter(|(_, solution)| solution.stable)
+            .min_by(|(_, left), (_, right)| {
+                left.po
+                    .distance_to(reference)
+                    .total_cmp(&right.po.distance_to(reference))
+            })
+    }
+
     pub fn stable_count(&self) -> usize {
         self.stable().count()
     }
