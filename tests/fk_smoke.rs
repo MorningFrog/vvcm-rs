@@ -1,34 +1,39 @@
 use vvcm_rs::{
-    FkSolution, FkSolutions, Point2, Point3, RobotFormation, SheetShape, VvcmError, VvcmFk,
+    FkSolution, FkSolutions, Point2, Point3, RobotFormation, Scalar, SheetShape, VvcmError, VvcmFk,
 };
 
 #[test]
-fn fk_scaffold_can_be_constructed() {
-    let sheet = SheetShape::new(vec![
-        Point2::new(-316.1, -421.9),
-        Point2::new(803.4, -384.1),
-        Point2::new(746.1, 712.8),
-        Point2::new(-367.3, 664.2),
-    ])
-    .unwrap();
-
-    let formation = RobotFormation::new(vec![
-        Point2::new(213.7, 122.7),
-        Point2::new(804.6, 37.2),
-        Point2::new(904.0, 550.0),
-        Point2::new(439.3, 715.9),
-    ])
-    .unwrap();
-
+fn readme_sample_matches_cpp_reference() {
+    let formation = readme_formation();
+    let sheet = readme_sheet();
     let mut fk = VvcmFk::new(4, 1000.0, sheet).unwrap();
 
-    let error = fk.update_stable_solutions(formation).unwrap_err();
-
-    assert_eq!(error, VvcmError::NotImplemented);
     assert_eq!(fk.robot_count(), 4);
     assert_eq!(fk.hold_height(), 1000.0);
-    assert_eq!(fk.solutions().stable_count(), 0);
-    assert_eq!(fk.solutions().all_count(), 0);
+
+    let solutions = fk.update_stable_solutions(formation).unwrap();
+
+    assert_eq!(solutions.all_count(), 3);
+    assert_eq!(solutions.stable_count(), 2);
+
+    let stable: Vec<_> = solutions.stable().collect();
+    assert_point3_close(
+        stable[0].po,
+        Point3::new(568.8123, 324.72644, 336.73608),
+        0.05,
+    );
+    assert_point2_close(stable[0].vo, Point2::new(238.6181, 125.02439), 0.05);
+    assert_eq!(stable[0].taut_cables, vec![0, 1, 2]);
+
+    assert_point3_close(
+        stable[1].po,
+        Point3::new(557.9307, 341.23087, 337.2464),
+        0.05,
+    );
+    assert_point2_close(stable[1].vo, Point2::new(208.79898, 152.53357), 0.05);
+    assert_eq!(stable[1].taut_cables, vec![0, 2, 3]);
+
+    assert!(solutions.iter().any(|solution| !solution.stable));
 }
 
 #[test]
@@ -53,5 +58,139 @@ fn fk_solutions_track_stability_per_solution() {
     assert_eq!(
         solutions.stable().next().unwrap().po,
         Point3::new(6.0, 7.0, 8.0)
+    );
+}
+
+#[test]
+#[allow(clippy::excessive_precision)]
+fn six_robot_local_sample_matches_cpp_simulation_reference() {
+    let absolute_formation = RobotFormation::new(vec![
+        Point2::new(-27.419184, -176.293854),
+        Point2::new(398.141083, -35.190411),
+        Point2::new(517.018127, 338.271301),
+        Point2::new(285.155762, 609.95575),
+        Point2::new(-175.608231, 569.463562),
+        Point2::new(-301.437988, 194.695297),
+    ])
+    .unwrap();
+    let origin = absolute_formation.points()[0];
+    let local_formation = absolute_formation.relative_to(origin);
+    let sheet = SheetShape::new(vec![
+        Point2::new(-131.665741, -376.508026),
+        Point2::new(480.675873, -388.066681),
+        Point2::new(877.700256, 217.088806),
+        Point2::new(562.778748, 826.754089),
+        Point2::new(-107.442101, 918.166626),
+        Point2::new(-453.516937, 284.887146),
+    ])
+    .unwrap();
+    let mut fk = VvcmFk::new(6, 823.0, sheet).unwrap();
+
+    let solutions = fk.update_stable_solutions(local_formation).unwrap();
+    let expected = Point3::new(137.674, 420.879, 301.218);
+    let closest = solutions
+        .stable()
+        .min_by(|left, right| {
+            left.po
+                .distance_to(expected)
+                .total_cmp(&right.po.distance_to(expected))
+        })
+        .unwrap();
+
+    assert_point3_close(closest.po, expected, 0.15);
+}
+
+#[test]
+fn infeasible_formation_is_reported() {
+    let sheet = SheetShape::new(vec![
+        Point2::new(0.0, 0.0),
+        Point2::new(1.0, 0.0),
+        Point2::new(1.0, 1.0),
+        Point2::new(0.0, 1.0),
+    ])
+    .unwrap();
+    let formation = RobotFormation::new(vec![
+        Point2::new(0.0, 0.0),
+        Point2::new(2.0, 0.0),
+        Point2::new(2.0, 2.0),
+        Point2::new(0.0, 2.0),
+    ])
+    .unwrap();
+    let mut fk = VvcmFk::new(4, 10.0, sheet).unwrap();
+
+    let error = fk.update_stable_solutions(formation).unwrap_err();
+
+    assert_eq!(error, VvcmError::InfeasibleFormation);
+    assert!(fk.solutions().is_empty());
+}
+
+#[test]
+fn formation_dimension_mismatch_is_reported() {
+    let mut fk = VvcmFk::new(4, 1000.0, readme_sheet()).unwrap();
+    let formation = RobotFormation::new(vec![
+        Point2::new(0.0, 0.0),
+        Point2::new(1.0, 0.0),
+        Point2::new(0.0, 1.0),
+    ])
+    .unwrap();
+
+    let error = fk.update_stable_solutions(formation).unwrap_err();
+
+    assert_eq!(
+        error,
+        VvcmError::DimensionMismatch {
+            context: "robot formation point count",
+            expected: 4,
+            actual: 3,
+        }
+    );
+}
+
+fn readme_formation() -> RobotFormation {
+    RobotFormation::new(vec![
+        Point2::new(213.7, 122.7),
+        Point2::new(804.6, 37.2),
+        Point2::new(904.0, 550.0),
+        Point2::new(439.3, 715.9),
+    ])
+    .unwrap()
+}
+
+fn readme_sheet() -> SheetShape {
+    SheetShape::new(vec![
+        Point2::new(-316.1, -421.9),
+        Point2::new(803.4, -384.1),
+        Point2::new(746.1, 712.8),
+        Point2::new(-367.3, 664.2),
+    ])
+    .unwrap()
+}
+
+fn assert_point2_close(actual: Point2, expected: Point2, tolerance: Scalar) {
+    assert!(
+        (actual.x - expected.x).abs() <= tolerance,
+        "x differs: actual {}, expected {}",
+        actual.x,
+        expected.x
+    );
+    assert!(
+        (actual.y - expected.y).abs() <= tolerance,
+        "y differs: actual {}, expected {}",
+        actual.y,
+        expected.y
+    );
+}
+
+fn assert_point3_close(actual: Point3, expected: Point3, tolerance: Scalar) {
+    assert_point2_close(
+        Point2::new(actual.x, actual.y),
+        Point2::new(expected.x, expected.y),
+        tolerance,
+    );
+    assert!(
+        (actual.z - expected.z).abs() <= tolerance,
+        "z differs: actual {}, expected {}",
+        actual.z,
+        expected.z
     );
 }

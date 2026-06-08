@@ -1,4 +1,4 @@
-use vvcm_rs::{Point2, RobotFormation, SheetShape, VvcmError, VvcmFk};
+use vvcm_rs::{Point2, RobotFormation, SheetShape, VvcmFk};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let formation = RobotFormation::new(vec![
@@ -17,14 +17,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut fk = VvcmFk::new(4, 1000.0, sheet)?;
 
-    match fk.update_stable_solutions(formation) {
-        Ok(solutions) => {
-            println!("stable solutions: {}", solutions.stable_count());
-        }
-        Err(VvcmError::NotImplemented) => {
-            println!("VVCM FK core is not implemented yet.");
-        }
-        Err(error) => return Err(error.into()),
+    let solutions = fk.update_stable_solutions(formation)?;
+
+    println!("all solutions: {}", solutions.all_count());
+    println!("stable solutions: {}", solutions.stable_count());
+
+    for (index, solution) in solutions.stable().enumerate() {
+        println!(
+            "#{index}: Po=({:.3}, {:.3}, {:.3}), Vo=({:.3}, {:.3}), taut={:?}",
+            solution.po.x,
+            solution.po.y,
+            solution.po.z,
+            solution.vo.x,
+            solution.vo.y,
+            solution.taut_cables,
+        );
     }
 
     Ok(())

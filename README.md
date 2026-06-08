@@ -1,13 +1,11 @@
 # vvcm-rs
 
-Rust implementation scaffold for the Virtual Variable Cables Model (VVCM)
-forward kinematics algorithm for multi-robot transportation with a deformable
-sheet.
+Rust implementation of the Virtual Variable Cables Model (VVCM) forward
+kinematics algorithm for multi-robot transportation with a deformable sheet.
 
 This crate is intended to become a Rust implementation of the existing C++ VVCM
-library. The current state is a project scaffold: public Rust APIs, module
-boundaries, examples, and smoke tests are in place, while the numerical forward
-kinematics core still needs to be ported.
+library. The forward kinematics core is implemented in Rust; simulation wrappers
+are still being filled out.
 
 ## Current Status
 
@@ -18,10 +16,10 @@ kinematics core still needs to be ported.
   and all-solution arrays.
 - `nalgebra` is kept as an internal numerical backend, not as the main public
   interface.
-- `VvcmFk::update_stable_solutions` currently returns
-  `VvcmError::NotImplemented`.
-- Simulation wrappers are scaffolded, but VVCM numerical updates are not yet
-  implemented.
+- `VvcmFk::update_stable_solutions` enumerates taut cable sets, solves candidate
+  forward-kinematics states, and marks stable solutions.
+- Simulation wrappers are scaffolded, but velocity-driven numerical updates are
+  not yet complete.
 
 ## Module Overview
 
@@ -67,6 +65,9 @@ let sheet = SheetShape::new(vec![
 
 let mut fk = VvcmFk::new(4, 1000.0, sheet)?;
 let solutions = fk.update_stable_solutions(formation)?;
+for solution in solutions.stable() {
+    println!("{:?}", solution.po);
+}
 # Ok::<(), vvcm_rs::VvcmError>(())
 ```
 
@@ -74,11 +75,9 @@ The default length unit follows the C++ implementation examples: millimeters.
 
 ## Porting Roadmap
 
-1. Port the VVCM forward kinematics core, including taut-cable enumeration,
-   constrained quadratic solve, polygon feasibility, and stability filtering.
-2. Add numerical regression tests against the C++ examples and README sample.
-3. Complete `VvcmSimulation` and `VvcmManualSimulation` behavior.
-4. Expand documentation once the numerical API is implemented.
+1. Broaden numerical regression tests against additional C++ examples.
+2. Complete `VvcmSimulation` and `VvcmManualSimulation` behavior.
+3. Expand documentation for algorithm details and expected numeric tolerances.
 
 ## Citation
 
