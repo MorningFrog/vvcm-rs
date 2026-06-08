@@ -3,9 +3,9 @@
 Rust implementation of the Virtual Variable Cables Model (VVCM) forward
 kinematics algorithm for multi-robot transportation with a deformable sheet.
 
-This crate is intended to become a Rust implementation of the existing C++ VVCM
-library. The forward kinematics core and simulation wrappers are implemented in
-Rust.
+`vvcm-rs` is an independent Rust crate for evaluating VVCM forward kinematics
+and simulation workflows. The forward kinematics core and simulation wrappers
+are implemented in Rust.
 
 ## Citation
 
@@ -42,8 +42,7 @@ For the original VVCM model, please cite:
 - Public API uses Rust domain types such as `Point2`, `Point3`,
   `RobotFormation`, `SheetShape`, and `FkSolution`.
 - FK results are stored as one list of `FkSolution` values; each solution has a
-  `stable` flag instead of mirroring the C++ implementation's separated stable
-  and all-solution arrays.
+  `stable` flag for filtering locally stable branches.
 - `nalgebra` is kept as an internal numerical backend, not as the main public
   interface.
 - `VvcmFk::update_stable_solutions` enumerates taut cable sets, solves candidate
@@ -76,7 +75,7 @@ Run the basic forward-kinematics example:
 cargo run --example basic_fk
 ```
 
-Run the C++-style 20-robot timing fixture in release mode:
+Run the 20-robot FK timing benchmark example in release mode:
 
 ```shell
 cargo run --release --example fk_timing
@@ -109,12 +108,13 @@ for solution in solutions.stable() {
 # Ok::<(), vvcm_rs::VvcmError>(())
 ```
 
-The default length unit follows the C++ implementation examples: millimeters.
-If `VvcmFk` sees values that look very small for millimeter-scale data, such as
-meter-scale coordinates, it emits a warning to `stderr`. Convert meter inputs to
-millimeters before solving, for example by multiplying lengths by `1000.0`.
+The bundled examples and regression fixtures use millimeters. If `VvcmFk` sees
+values that look very small for millimeter-scale data, such as meter-scale
+coordinates, it emits a warning to `stderr`. Convert meter inputs to millimeters
+before solving, for example by multiplying lengths by `1000.0`.
 
-## Porting Roadmap
+## Roadmap
 
-1. Broaden numerical regression tests against additional C++ examples.
+1. Broaden numerical regression tests across additional robot/sheet
+   configurations.
 2. Expand documentation for algorithm details and expected numeric tolerances.

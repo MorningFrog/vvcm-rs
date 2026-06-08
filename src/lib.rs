@@ -7,7 +7,7 @@
 //! The crate exposes small domain types such as [`Point2`],
 //! [`RobotFormation`], [`SheetShape`], and [`FkSolution`] while keeping
 //! `nalgebra` as an internal numerical backend. Length values are unitless to
-//! the type system, but the reference data and examples use millimeters.
+//! the type system, but the sample data and examples use millimeters.
 //!
 //! # Basic usage
 //!

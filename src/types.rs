@@ -8,8 +8,8 @@ use crate::VvcmError;
 
 /// Floating-point scalar used by the solver and public geometry types.
 ///
-/// The current implementation uses `f32` to match the precision of the
-/// original C++ fixtures and regression data.
+/// The current implementation uses `f32` for compact numeric data and
+/// compatibility with the bundled fixtures and regression data.
 pub type Scalar = f32;
 
 /// A two-dimensional point or vector in the XY plane.

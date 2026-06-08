@@ -1,8 +1,8 @@
 //! Internal matrix conversion helpers.
 //!
 //! These adapters keep nalgebra-specific conversions outside the public domain
-//! types. They are currently retained for porting work and future numerical
-//! comparisons against matrix-oriented implementations.
+//! types. They are retained for internal numerical experiments and comparisons
+//! against matrix-oriented implementations.
 
 #![allow(dead_code)]
 

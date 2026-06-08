@@ -9,8 +9,7 @@ use crate::error::VvcmError;
 use crate::types::{FkSolution, FkSolutions, Point2, Point3, RobotFormation, Scalar, SheetShape};
 use nalgebra::{DMatrix, DVector};
 
-// Numerical thresholds mirror the tolerance-driven style of the original C++
-// implementation. They are intentionally local to the solver because changing
+// Numerical thresholds are intentionally local to the solver because changing
 // them affects branch enumeration and stability classification.
 const RANK_EPS: Scalar = 1.0e-4;
 const STABILITY_EPS: Scalar = 1.0e-8;
@@ -47,8 +46,8 @@ impl VvcmFk {
     ///
     /// # Units
     ///
-    /// Length units are not encoded in the type system. The reference
-    /// implementation and examples use millimeters, so inputs that look
+    /// Length units are not encoded in the type system. The bundled examples
+    /// and regression fixtures use millimeters, so inputs that look
     /// meter-scaled emit a one-time warning to `stderr`.
     pub fn new(
         robot_count: usize,
@@ -168,7 +167,7 @@ impl VvcmFk {
     }
 
     /// Emits a single unit-scale warning when inputs look smaller than the
-    /// millimeter-scale reference data.
+    /// millimeter-scale sample data.
     fn warn_if_unit_scale_looks_small(&mut self, formation: Option<&RobotFormation>) {
         if self.unit_warning_emitted {
             return;
@@ -194,8 +193,7 @@ impl VvcmFk {
         }
 
         let mut candidates = Vec::new();
-        // The port currently mirrors the C++ solver's practical search bound:
-        // at least three taut cables are required to locate the object, while
+        // At least three taut cables are required to locate the object, while
         // more than five taut cables are not needed for the supported cases.
         let max_taut_count = self.robot_count.min(5);
 
@@ -584,7 +582,7 @@ fn is_locally_minimal(candidate: &CandidateSolution) -> bool {
     // Degenerate taut sets need a basis transform (`omega`) to search for a
     // non-negative multiplier representation. Non-degenerate candidates already
     // returned above, so a missing transform means this candidate is unstable in
-    // the current port.
+    // this solver.
     let Some(omega) = &candidate.omega else {
         return false;
     };

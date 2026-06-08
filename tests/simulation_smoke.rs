@@ -5,7 +5,7 @@ use vvcm_rs::{
 };
 
 #[test]
-fn manual_simulation_matches_cpp_reference() {
+fn manual_simulation_returns_expected_branch() {
     let mut simulation = VvcmManualSimulation::new(6, 823.0, six_robot_sheet()).unwrap();
 
     let po = simulation
@@ -29,7 +29,7 @@ fn manual_simulation_matches_cpp_reference() {
 }
 
 #[test]
-fn velocity_simulation_initializes_and_steps_like_cpp_reference() {
+fn velocity_simulation_initializes_and_steps_consistently() {
     let mut simulation = VvcmSimulation::new(
         6,
         823.0,

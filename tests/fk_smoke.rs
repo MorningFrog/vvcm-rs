@@ -3,7 +3,7 @@ use vvcm_rs::{
 };
 
 #[test]
-fn readme_sample_matches_cpp_reference() {
+fn readme_sample_matches_expected_solutions() {
     let formation = readme_formation();
     let sheet = readme_sheet();
     let mut fk = VvcmFk::new(4, 1000.0, sheet).unwrap();
@@ -63,7 +63,7 @@ fn fk_solutions_track_stability_per_solution() {
 
 #[test]
 #[allow(clippy::excessive_precision)]
-fn six_robot_local_sample_matches_cpp_simulation_reference() {
+fn six_robot_local_sample_matches_expected_solution() {
     let absolute_formation = RobotFormation::new(vec![
         Point2::new(-27.419184, -176.293854),
         Point2::new(398.141083, -35.190411),
