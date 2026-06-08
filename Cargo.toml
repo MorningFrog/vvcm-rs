@@ -5,7 +5,12 @@ edition = "2024"
 description = "Kinematics of multi-robot transporting systems with a deformable sheet using VVCM."
 authors = ["MorningFrog <1098224028@qq.com>"]
 license = "Apache-2.0"
+readme = "README.md"
 repository = "https://github.com/morningfrog/vvcm-rs"
+homepage = "https://github.com/morningfrog/vvcm-rs"
+documentation = "https://docs.rs/vvcm-rs"
+keywords = ["kinematics", "robotics", "vvcm", "deformable-sheet"]
+categories = ["algorithms", "science", "simulation"]
 
 [lib]
 name = "vvcm_rs"

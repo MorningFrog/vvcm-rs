@@ -12,3 +12,9 @@
 - Added typed PyO3 Python bindings, package metadata, and Python regression tests.
 - Added a C ABI, header-only C++ wrapper, native `staticlib` output, and a
   Cargo-driven C++ smoke test.
+- Added crates.io, PyPI, and vcpkg distribution metadata plus a manual GitHub
+  Actions release workflow.
+- Added a repo-local vcpkg overlay port for C and C++ consumers.
+- Added a default-on release workflow `dry-run` input that validates builds,
+  release notes, vcpkg packaging, and publishing credentials without creating a
+  release.

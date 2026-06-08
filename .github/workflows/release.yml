@@ -1,0 +1,270 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: "Validate the release without creating tags, GitHub releases, or package uploads."
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Publish packages
+    runs-on: ubuntu-latest
+    env:
+      CARGO_TERM_COLOR: always
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal --component clippy rustfmt
+          rustup default stable
+          rustup show
+
+      - name: Install Python release tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --upgrade maturin twine pytest numpy
+
+      - name: Check release credentials
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${CARGO_REGISTRY_TOKEN:-}" ]; then
+            echo "::error title=Missing secret::CARGO_REGISTRY_TOKEN is not configured."
+            exit 1
+          fi
+
+          if [ -z "${PYPI_API_TOKEN:-}" ]; then
+            echo "::error title=Missing secret::PYPI_API_TOKEN is not configured."
+            exit 1
+          fi
+
+          python - <<'PY'
+          import os
+
+          cargo_token = os.environ["CARGO_REGISTRY_TOKEN"]
+          pypi_token = os.environ["PYPI_API_TOKEN"]
+
+          if len(cargo_token.strip()) < 20:
+              raise SystemExit("CARGO_REGISTRY_TOKEN looks too short to be a usable crates.io token.")
+          if not pypi_token.startswith("pypi-"):
+              raise SystemExit("PYPI_API_TOKEN should start with 'pypi-'.")
+          PY
+
+          crates_status="$(
+            curl --silent --show-error --output crates-credential-response.json --write-out "%{http_code}" \
+              "https://crates.io/api/v1/me" \
+              --header "Accept: application/json" \
+              --header "Authorization: ${CARGO_REGISTRY_TOKEN}" \
+              --header "User-Agent: vvcm-rs-release-workflow/${{ github.run_id }} (https://github.com/${{ github.repository }})"
+          )"
+
+          case "$crates_status" in
+            200)
+              echo "crates.io accepted CARGO_REGISTRY_TOKEN."
+              ;;
+            401|403)
+              cat crates-credential-response.json
+              echo "::error title=Invalid crates.io token::CARGO_REGISTRY_TOKEN was rejected by crates.io."
+              exit 1
+              ;;
+            *)
+              cat crates-credential-response.json
+              echo "::error title=Unexpected crates.io response::Expected HTTP 200 from /api/v1/me, got ${crates_status}."
+              exit 1
+              ;;
+          esac
+
+          pypi_status="$(
+            curl --silent --show-error --output pypi-credential-response.txt --write-out "%{http_code}" \
+              --request POST "https://upload.pypi.org/legacy/" \
+              --user "__token__:${PYPI_API_TOKEN}" \
+              --form ":action=file_upload" \
+              --form "protocol_version=1"
+          )"
+
+          case "$pypi_status" in
+            400|422)
+              echo "PyPI accepted the token and rejected the intentionally incomplete dry-run upload form."
+              ;;
+            401|403)
+              cat pypi-credential-response.txt
+              echo "::error title=Invalid PyPI token::PYPI_API_TOKEN was rejected by PyPI."
+              exit 1
+              ;;
+            *)
+              cat pypi-credential-response.txt
+              echo "::error title=Unexpected PyPI response::Expected HTTP 400/422 for the incomplete form, got ${pypi_status}."
+              exit 1
+              ;;
+          esac
+
+      - name: Read release version
+        id: version
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          import pathlib
+          import tomllib
+
+          cargo = tomllib.loads(pathlib.Path("Cargo.toml").read_text(encoding="utf-8"))
+          pyproject = tomllib.loads(pathlib.Path("pyproject.toml").read_text(encoding="utf-8"))
+          vcpkg = json.loads(
+              pathlib.Path("vcpkg/ports/vvcm-rs/vcpkg.json").read_text(encoding="utf-8")
+          )
+
+          version = cargo["package"]["version"]
+          versions = {
+              "Cargo.toml": version,
+              "pyproject.toml": pyproject["project"]["version"],
+              "vcpkg/ports/vvcm-rs/vcpkg.json": vcpkg["version-semver"],
+          }
+          mismatches = [
+              f"{path}={value}"
+              for path, value in versions.items()
+              if value != version
+          ]
+          if mismatches:
+              raise SystemExit("package versions do not match: " + ", ".join(mismatches))
+
+          print(f"version={version}")
+          print(f"tag=v{version}")
+          PY
+
+      - name: Verify tag is unused
+        run: |
+          tag="${{ steps.version.outputs.tag }}"
+          if git rev-parse "$tag" >/dev/null 2>&1; then
+            echo "Tag $tag already exists locally"
+            exit 1
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
+            echo "Tag $tag already exists on origin"
+            exit 1
+          fi
+
+      - name: Run Rust checks
+        run: |
+          cargo fmt --check
+          cargo clippy --all-targets -- -D warnings
+          cargo test
+          cargo publish --dry-run --locked
+
+      - name: Run Python binding tests
+        run: |
+          maturin develop --locked
+          python -m pytest tests/python
+
+      - name: Test vcpkg overlay port
+        run: |
+          set -euo pipefail
+          git clone --depth 1 https://github.com/microsoft/vcpkg "$RUNNER_TEMP/vcpkg"
+          "$RUNNER_TEMP/vcpkg/bootstrap-vcpkg.sh" -disableMetrics
+          "$RUNNER_TEMP/vcpkg/vcpkg" install vvcm-rs \
+            --overlay-ports="$GITHUB_WORKSPACE/vcpkg/ports" \
+            --triplet x64-linux
+
+      - name: Build Python distributions
+        run: |
+          mkdir -p python-dist release-dist
+          maturin build --release --locked --sdist --out python-dist
+          python -m twine check python-dist/*
+          cp python-dist/* release-dist/
+
+      - name: Package vcpkg overlay source archive
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          git archive --format=zip --prefix="vvcm-rs-${version}/" \
+            -o "release-dist/vvcm-rs-${version}-vcpkg-overlay.zip" HEAD
+
+      - name: Build release notes
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          python - <<'PY'
+          import os
+          import pathlib
+          import re
+
+          changelog = pathlib.Path("CHANGELOG.md").read_text(encoding="utf-8")
+          match = re.search(r"^## Unreleased\s*(.*?)(?=^## |\Z)", changelog, re.M | re.S)
+          notes = match.group(1).strip() if match else ""
+          if not notes:
+              notes = "See CHANGELOG.md for release details."
+
+          pathlib.Path("release-notes.md").write_text(
+              f"## vvcm-rs {os.environ['VERSION']}\n\n{notes}\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Preview release notes
+        run: |
+          cat release-notes.md
+          {
+            echo "## Release notes preview"
+            echo
+            cat release-notes.md
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Create git tag
+        if: ${{ !inputs['dry-run'] }}
+        run: |
+          tag="${{ steps.version.outputs.tag }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$tag" -m "Release $tag"
+          git push origin "$tag"
+
+      - name: Publish crate to crates.io
+        if: ${{ !inputs['dry-run'] }}
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --locked
+
+      - name: Publish Python distributions to PyPI
+        if: ${{ !inputs['dry-run'] }}
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: python -m twine upload --non-interactive --skip-existing python-dist/*
+
+      - name: Create GitHub release
+        if: ${{ !inputs['dry-run'] }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.version.outputs.tag }}" release-dist/* \
+            --verify-tag \
+            --title "vvcm-rs ${{ steps.version.outputs.version }}" \
+            --notes-file release-notes.md
+
+      - name: Finish dry run
+        if: ${{ inputs['dry-run'] }}
+        run: |
+          echo "Dry run completed. No git tag, GitHub release, crates.io publish, or PyPI upload was created."
+          echo "## Dry run completed" >> "$GITHUB_STEP_SUMMARY"
+          echo "No git tag, GitHub release, crates.io publish, or PyPI upload was created." >> "$GITHUB_STEP_SUMMARY"

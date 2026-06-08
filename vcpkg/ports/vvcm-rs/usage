@@ -1,0 +1,8 @@
+vvcm-rs provides C and C++ headers plus a native library:
+
+    find_package(vvcm-rs CONFIG REQUIRED)
+    target_link_libraries(main PRIVATE vvcm_rs::vvcm_rs)
+
+Include the C++ wrapper with:
+
+    #include <vvcm_rs.hpp>

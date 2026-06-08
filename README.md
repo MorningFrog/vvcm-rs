@@ -57,6 +57,11 @@ For the original VVCM model, please cite:
 - Python bindings are available through the `vvcm_rs` package. The wheel ships
   typed Python package files (`py.typed` and `__init__.pyi`) so editors and type
   checkers can inspect the exported classes.
+- Distribution metadata is available for crates.io, PyPI, and the repo-local
+  vcpkg overlay port under `vcpkg/ports/vvcm-rs`. The manual GitHub Actions
+  `Release` workflow publishes the Rust crate, Python distributions, and a
+  vcpkg-ready source archive. Its `dry-run` input defaults to `true` for
+  validation-only runs.
 
 ## Module Overview
 
@@ -67,6 +72,35 @@ For the original VVCM model, please cite:
 - `types`: public domain types used by the Rust API.
 - `ffi`: C ABI implementation behind the C/C++ headers.
 - `error`: crate error type.
+
+## Installation
+
+Use the Rust crate from crates.io:
+
+```shell
+cargo add vvcm-rs
+```
+
+Install the Python package from PyPI:
+
+```shell
+python -m pip install vvcm-rs
+```
+
+Use the C/C++ package through the repo-local vcpkg overlay port. The overlay
+builds the native Rust library with Cargo, so Rust must be installed on the
+machine running vcpkg:
+
+```shell
+vcpkg install vvcm-rs --overlay-ports=<path-to-vvcm-rs>/vcpkg/ports
+```
+
+Then consume the installed CMake package:
+
+```cmake
+find_package(vvcm-rs CONFIG REQUIRED)
+target_link_libraries(app PRIVATE vvcm_rs::vvcm_rs)
+```
 
 ## Quick Start
 
@@ -174,6 +208,12 @@ int main() {
 ```
 
 ## Python Usage
+
+Install the published package from PyPI:
+
+```shell
+python -m pip install vvcm-rs
+```
 
 Build and install the Python extension in a virtual environment:
 
