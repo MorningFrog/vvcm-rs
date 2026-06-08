@@ -62,7 +62,17 @@ cd <repository-name>
 cargo build
 ```
 
-### 3. Start the Example
+### 3. Install Python Binding Tools
+
+Use a virtual environment for Python binding development and tests:
+
+```bash
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip maturin pytest numpy
+```
+
+### 4. Start the Example
 
 ```bash
 cargo run --example basic_fk
@@ -75,6 +85,14 @@ Before committing code, make sure formatting and static checks pass:
 ```bash
 cargo fmt
 cargo clippy
+```
+
+When changing Python bindings, also confirm the editable extension build
+succeeds:
+
+```bash
+maturin develop
+python -m pytest tests/python
 ```
 
 Code requirements:
@@ -93,6 +111,13 @@ Before submitting a Pull Request, make sure the relevant tests pass:
 
 ```bash
 cargo test
+```
+
+Python binding changes should also pass:
+
+```bash
+maturin develop
+python -m pytest tests/python
 ```
 
 When adding a feature or fixing a bug, add or update tests whenever possible.

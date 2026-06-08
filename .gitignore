@@ -1,1 +1,11 @@
 /target
+/.venv
+/.pytest_cache
+/dist
+/*.egg-info
+__pycache__/
+*.pyc
+*.pyd
+*.pdb
+
+/.vscode/settings.json

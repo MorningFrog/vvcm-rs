@@ -1,0 +1,34 @@
+[build-system]
+requires = ["maturin>=1.8,<2"]
+build-backend = "maturin"
+
+[project]
+name = "vvcm-rs"
+version = "2.0.0"
+description = "Python bindings for the VVCM forward-kinematics and simulation library."
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [{ name = "MorningFrog", email = "1098224028@qq.com" }]
+license = { text = "Apache-2.0" }
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
+    "Topic :: Scientific/Engineering",
+]
+
+[project.urls]
+Homepage = "https://github.com/morningfrog/vvcm-rs"
+Repository = "https://github.com/morningfrog/vvcm-rs"
+
+[tool.maturin]
+bindings = "pyo3"
+features = ["python-extension"]
+module-name = "vvcm_rs._vvcm_rs"
+python-source = "python"
+include = [
+    "python/vvcm_rs/__init__.pyi",
+    "python/vvcm_rs/py.typed",
+]

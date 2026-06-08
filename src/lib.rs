@@ -42,6 +42,7 @@ pub mod simulation;
 pub mod types;
 
 mod math;
+mod python;
 
 pub use error::VvcmError;
 pub use fk::VvcmFk;

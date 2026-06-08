@@ -51,6 +51,9 @@ For the original VVCM model, please cite:
   the closest stable FK branch.
 - `VvcmManualSimulation` returns the closest stable FK branch for externally
   supplied robot formations.
+- Python bindings are available through the `vvcm_rs` package. The wheel ships
+  typed Python package files (`py.typed` and `__init__.pyi`) so editors and type
+  checkers can inspect the exported classes.
 
 ## Module Overview
 
@@ -106,6 +109,46 @@ for solution in solutions.stable() {
     println!("{:?}", solution.po);
 }
 # Ok::<(), vvcm_rs::VvcmError>(())
+```
+
+## Python Usage
+
+Build and install the Python extension in a virtual environment:
+
+```shell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip maturin pytest numpy
+maturin develop
+python -m pytest tests/python
+```
+
+The Python package name on PyPI is `vvcm-rs`, and the import name is
+`vvcm_rs`. Coordinate collections accept `Point2` values, ordinary
+`list`/`tuple` rows, or sequence-like two-column arrays such as NumPy `N x 2`
+arrays.
+
+```python
+from vvcm_rs import VvcmFk
+
+formation = [
+    (213.7, 122.7),
+    (804.6, 37.2),
+    (904.0, 550.0),
+    (439.3, 715.9),
+]
+sheet = [
+    (-316.1, -421.9),
+    (803.4, -384.1),
+    (746.1, 712.8),
+    (-367.3, 664.2),
+]
+
+fk = VvcmFk(4, 1000.0, sheet)
+solutions = fk.update_stable_solutions(formation)
+
+for solution in solutions.stable():
+    print(solution.po.as_tuple(), solution.vo.as_tuple(), solution.taut_cables)
 ```
 
 The bundled examples and regression fixtures use millimeters. If `VvcmFk` sees

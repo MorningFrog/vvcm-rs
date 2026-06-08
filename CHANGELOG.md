@@ -9,3 +9,4 @@
 - Completed `VvcmSimulation` and `VvcmManualSimulation` behavior.
 - Optimized the `VvcmFk` hot path by reusing precomputed point data and removing unused per-candidate work.
 - Documented the public Rust API and key internal FK/simulation steps.
+- Added typed PyO3 Python bindings, package metadata, and Python regression tests.
