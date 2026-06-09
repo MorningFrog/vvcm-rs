@@ -7,6 +7,9 @@ kinematics algorithm for multi-robot transportation with a deformable sheet.
 and simulation workflows. The forward kinematics core and simulation wrappers
 are implemented in Rust.
 
+If you plan to modify the codebase, read [CONTRIBUTING.md](CONTRIBUTING.md)
+first for workflow, structure, and release expectations.
+
 ## Citation
 
 If you use the forward kinematics algorithm, please cite:
@@ -37,7 +40,7 @@ For the original VVCM model, please cite:
 }
 ```
 
-## Current Status
+## Published Release
 
 - Public API uses Rust domain types such as `Point2`, `Point3`,
   `RobotFormation`, `SheetShape`, and `FkSolution`.
@@ -57,11 +60,11 @@ For the original VVCM model, please cite:
 - Python bindings are available through the `vvcm_rs` package. The wheel ships
   typed Python package files (`py.typed` and `__init__.pyi`) so editors and type
   checkers can inspect the exported classes.
-- Distribution metadata is available for crates.io, PyPI, and the repo-local
-  vcpkg overlay port under `vcpkg/ports/vvcm-rs`. The manual GitHub Actions
-  `Release` workflow publishes the Rust crate, Python distributions, and a
-  vcpkg-ready source archive. Its `dry-run` input defaults to `true` for
-  validation-only runs.
+- The `1.0.0` release is published on crates.io, PyPI, GitHub Releases, and
+  vcpkg; the repo-local `vcpkg/ports/vvcm-rs` tree remains available for
+  overlay-based builds and source-archive packaging.
+- The GitHub Actions `Release` workflow remains available for future version
+  bumps and validation runs.
 
 ## Module Overview
 
@@ -87,9 +90,15 @@ Install the Python package from PyPI:
 python -m pip install vvcm-rs
 ```
 
-Use the C/C++ package through the repo-local vcpkg overlay port. The overlay
-builds the native Rust library with Cargo, so Rust must be installed on the
-machine running vcpkg:
+Install the published C/C++ package with vcpkg:
+
+```shell
+vcpkg install vvcm-rs
+```
+
+If you want to build from the repository source instead, use the repo-local
+overlay port. The overlay builds the native Rust library with Cargo, so Rust
+must be installed on the machine running vcpkg:
 
 ```shell
 vcpkg install vvcm-rs --overlay-ports=<path-to-vvcm-rs>/vcpkg/ports

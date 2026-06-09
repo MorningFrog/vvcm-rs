@@ -81,6 +81,28 @@ python -m pip install --upgrade pip maturin pytest numpy
 cargo run --example basic_fk
 ```
 
+## Repository Structure
+
+The repository centers on a single Rust crate with Python bindings and C/C++
+exports:
+
+* `src/` contains the core Rust implementation, including the FK solver,
+  simulation wrappers, FFI layer, Python bindings, math helpers, error types,
+  and public domain types.
+* `include/` contains the C header and C++ wrapper for native consumers.
+* `python/` contains the published Python package, module entry point, and type
+  information shipped with the wheel.
+* `examples/` contains runnable Rust examples and timing demos.
+* `tests/` contains Rust smoke tests, the C++ export smoke test, and Python
+  binding tests.
+* `vcpkg/ports/vvcm-rs/` contains the repo-local vcpkg overlay port and its
+  packaging metadata.
+* `.github/workflows/` contains CI and release automation, including the
+  published release workflow.
+* Root metadata files such as `Cargo.toml`, `pyproject.toml`, `README.md`,
+  `CHANGELOG.md`, `TODO.md`, and `LICENSE` describe the package, docs, and
+  release history.
+
 ## Code Style
 
 Before committing code, make sure formatting and static checks pass:
@@ -166,65 +188,10 @@ docs: update deployment guide
 
 ## Release Process
 
-Before releasing, confirm that:
-
-* All planned changes have been merged
-* All tests have passed
-* The version number has been updated
-* The changelog has been updated
-* CI/CD checks have passed
-
-The release workflow publishes to crates.io and PyPI, and creates a GitHub
-release asset that contains a source tree with the vcpkg overlay port. Configure
-the crates.io secret before running it, and add a PyPI Trusted Publisher for the
-GitHub Actions workflow plus the `pypi` environment in your PyPI project
-settings:
-
-| Secret                 | Purpose                         |
-| ---------------------- | ------------------------------- |
-| `CARGO_REGISTRY_TOKEN` | crates.io publishing token      |
-
-Version numbers should follow Semantic Versioning:
-
-```text
-MAJOR.MINOR.PATCH
-```
-
-Examples:
-
-```text
-1.0.0
-1.1.0
-1.1.1
-```
-
-Version meaning:
-
-| Version | Description                      |
-| ------- | -------------------------------- |
-| `MAJOR` | Breaking changes                 |
-| `MINOR` | Backward-compatible new features |
-| `PATCH` | Backward-compatible bug fixes    |
-
-The release process requires a manual run of the GitHub Actions workflow named "Release". It has a `dry-run` input that defaults to `true`. Keep `dry-run` enabled to validate the release without creating a tag, GitHub release, crates.io upload, or PyPI upload. Set `dry-run` to `false` only for the final publishing run.
-
-The workflow will:
-
-1. Verify that `Cargo.toml`, `pyproject.toml`, and `vcpkg/ports/vvcm-rs/vcpkg.json` use the same version.
-2. Check that the crates.io secret is configured. The workflow validates the token with the authenticated `/api/v1/me` endpoint.
-3. When `dry-run` is `true`, validate the PyPI Trusted Publisher configuration by minting a short-lived OIDC-backed token without uploading anything.
-4. Run Rust formatting, clippy, tests, and a crates.io dry run.
-5. Build and check the Python source distribution and wheel.
-6. Build the repo-local vcpkg overlay port.
-7. Generate and print the GitHub release notes from the top `CHANGELOG.md` unreleased section.
-8. When `dry-run` is `false`, publish the Rust crate to crates.io.
-9. When `dry-run` is `false`, publish the Python distributions to PyPI using `pypa/gh-action-pypi-publish`.
-10. When `dry-run` is `false`, create a new Git tag named `v<version>` from the version in `Cargo.toml`.
-11. When `dry-run` is `false`, create a GitHub release and attach the Python distributions plus a vcpkg-ready source archive.
-
-The vcpkg overlay port in `vcpkg/ports/vvcm-rs` is ready for local or release
-source-archive use. Publishing it to the official vcpkg registry requires a
-separate upstream PR after a tagged GitHub release is available.
+Releases are published only by authors or collaborators through the GitHub
+Actions workflow named "Release". Do not publish packages, create tags, or
+create GitHub releases manually from a local machine. The workflow itself is
+the release path, and it is triggered by hand when a release is ready.
 
 ## Issue Guidelines
 

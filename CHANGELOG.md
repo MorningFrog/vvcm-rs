@@ -2,21 +2,36 @@
 
 ## Unreleased
 
-- Implemented the Rust `VvcmFk` forward kinematics core.
-- Added regression coverage for the README forward-kinematics sample.
-- Added a runtime warning for inputs that look too small for millimeter units.
-- Added a release-friendly FK timing example for a 20-robot benchmark fixture.
-- Completed `VvcmSimulation` and `VvcmManualSimulation` behavior.
-- Optimized the `VvcmFk` hot path by reusing precomputed point data and removing unused per-candidate work.
-- Documented the public Rust API and key internal FK/simulation steps.
-- Added typed PyO3 Python bindings, package metadata, and Python regression tests.
-- Added a C ABI, header-only C++ wrapper, native `staticlib` output, and a
-  Cargo-driven C++ smoke test.
-- Added crates.io, PyPI, and vcpkg distribution metadata plus a manual GitHub
-  Actions release workflow.
-- Added a repo-local vcpkg overlay port for C and C++ consumers.
-- Added a default-on release workflow `dry-run` input that validates builds,
-  release notes, vcpkg packaging, and publishing credentials without creating a
-  release.
-- Switched the PyPI release path from static API tokens to Trusted Publishing
-  with GitHub Actions OIDC.
+- No unreleased changes.
+
+## 1.0.0 - 2026-06-09
+
+- Initial public release of `vvcm-rs`, a Rust implementation of the Virtual
+  Variable Cables Model (VVCM) forward-kinematics workflow for multi-robot
+  transportation with a deformable sheet.
+- Published packages are available from crates.io, PyPI, GitHub Releases, and
+  vcpkg.
+- Rust API provides domain types such as `Point2`, `Point3`, `RobotFormation`,
+  `SheetShape`, `FkSolution`, `VvcmFk`, `VvcmSimulation`, and
+  `VvcmManualSimulation`.
+- Forward-kinematics solving supports taut-cable-set enumeration, candidate
+  state solving, stable-branch marking, and local filtering of stable
+  solutions.
+- Simulation APIs support velocity-driven robot-formation updates and manual
+  stable-solution queries for externally supplied formations.
+- Python package `vvcm-rs` exposes the `vvcm_rs` module with typed PyO3
+  bindings, `py.typed`, and `.pyi` type information.
+- C and C++ consumers can use the raw C ABI in `include/vvcm_rs.h`, the C++17
+  RAII wrapper in `include/vvcm_rs.hpp`, and native shared or static library
+  artifacts.
+- vcpkg packaging supports CMake consumption through the `vvcm_rs::vvcm_rs`
+  target, with the repo-local overlay port available for source builds.
+- Examples include a basic forward-kinematics run and a 20-robot FK timing
+  benchmark fixture.
+- Validation coverage includes Rust smoke tests, README sample coverage, Python
+  binding tests, and a Cargo-driven C++ export smoke test.
+- The library emits a runtime warning for inputs that appear too small for the
+  millimeter-scale fixtures used by the bundled examples and tests.
+- Release automation validates version consistency, Rust checks, Python
+  distributions, vcpkg packaging, crates.io publishing, PyPI Trusted Publishing,
+  and GitHub release assets.

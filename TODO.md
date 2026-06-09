@@ -1,4 +1,7 @@
 # TODO
 
-- Submit the vcpkg overlay port to an official or custom vcpkg registry after
-  the first tagged GitHub release is available.
+Release packaging is complete. Remaining follow-up work:
+
+- Broaden numerical regression tests across additional robot and sheet
+  configurations.
+- Expand documentation for algorithm details and expected numeric tolerances.

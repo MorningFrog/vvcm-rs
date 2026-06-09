@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "vvcm-rs"
-version = "2.0.0"
+version = "1.0.0"
 description = "Python bindings for the VVCM forward-kinematics and simulation library."
 readme = "README.md"
 keywords = ["robotics", "kinematics", "vvcm", "deformable-sheet"]
@@ -30,7 +30,4 @@ bindings = "pyo3"
 features = ["python-extension"]
 module-name = "vvcm_rs._vvcm_rs"
 python-source = "python"
-include = [
-    "python/vvcm_rs/__init__.pyi",
-    "python/vvcm_rs/py.typed",
-]
+include = ["python/vvcm_rs/__init__.pyi", "python/vvcm_rs/py.typed"]

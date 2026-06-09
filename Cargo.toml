@@ -1,6 +1,6 @@
 [package]
 name = "vvcm-rs"
-version = "2.0.0"
+version = "1.0.0"
 edition = "2024"
 description = "Kinematics of multi-robot transporting systems with a deformable sheet using VVCM."
 authors = ["MorningFrog <1098224028@qq.com>"]
