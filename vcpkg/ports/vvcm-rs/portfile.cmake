@@ -5,9 +5,32 @@ if(NOT EXISTS "${VVCM_RS_SOURCE_PATH}/Cargo.toml")
     message(FATAL_ERROR "The vvcm-rs vcpkg overlay port must be used from a vvcm-rs source tree.")
 endif()
 
-find_program(CARGO_EXECUTABLE NAMES cargo)
+set(cargo_search_hints)
+if(DEFINED ENV{CARGO_HOME} AND NOT "$ENV{CARGO_HOME}" STREQUAL "")
+    list(APPEND cargo_search_hints "$ENV{CARGO_HOME}/bin")
+endif()
+if(VCPKG_HOST_IS_WINDOWS)
+    if(DEFINED ENV{USERPROFILE} AND NOT "$ENV{USERPROFILE}" STREQUAL "")
+        list(APPEND cargo_search_hints "$ENV{USERPROFILE}/.cargo/bin")
+    endif()
+elseif(DEFINED ENV{HOME} AND NOT "$ENV{HOME}" STREQUAL "")
+    list(APPEND cargo_search_hints "$ENV{HOME}/.cargo/bin")
+endif()
+
+if(cargo_search_hints)
+    find_program(
+        CARGO_EXECUTABLE
+        NAMES cargo cargo.exe
+        HINTS ${cargo_search_hints}
+    )
+else()
+    find_program(CARGO_EXECUTABLE NAMES cargo cargo.exe)
+endif()
 if(NOT CARGO_EXECUTABLE)
-    message(FATAL_ERROR "cargo is required to build vvcm-rs. Install Rust with rustup before running vcpkg.")
+    message(FATAL_ERROR
+        "cargo is required to build vvcm-rs. Install Rust with rustup, reopen your shell so cargo is on PATH, "
+        "or set CARGO_HOME to your Rust toolchain directory before running vcpkg."
+    )
 endif()
 
 function(vvcm_rs_install_profile PROFILE OUTPUT_PROFILE PACKAGE_SUBDIR)

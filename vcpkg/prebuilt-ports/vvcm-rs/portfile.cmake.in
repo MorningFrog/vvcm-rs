@@ -1,0 +1,78 @@
+if(NOT VCPKG_TARGET_ARCHITECTURE STREQUAL "x64")
+    message(FATAL_ERROR "The vvcm-rs prebuilt overlay currently supports only x64 triplets. Use the source overlay port for other architectures.")
+endif()
+
+if(VCPKG_TARGET_IS_WINDOWS)
+    vcpkg_check_linkage(ONLY_DYNAMIC_LIBRARY)
+    set(VVCM_RS_ASSET_TRIPLET "x64-windows")
+    set(VVCM_RS_SHA512 "@VVCM_RS_SHA512_X64_WINDOWS@")
+elseif(VCPKG_TARGET_IS_LINUX)
+    set(VVCM_RS_ASSET_TRIPLET "x64-linux")
+    set(VVCM_RS_SHA512 "@VVCM_RS_SHA512_X64_LINUX@")
+elseif(VCPKG_TARGET_IS_OSX)
+    set(VVCM_RS_ASSET_TRIPLET "x64-osx")
+    set(VVCM_RS_SHA512 "@VVCM_RS_SHA512_X64_OSX@")
+else()
+    message(FATAL_ERROR "The vvcm-rs prebuilt overlay supports x64 Windows, Linux, and macOS. Use the source overlay port for this platform.")
+endif()
+
+set(VVCM_RS_ASSET_NAME "vvcm-rs-${VERSION}-${VVCM_RS_ASSET_TRIPLET}.zip")
+vcpkg_download_distfile(VVCM_RS_ARCHIVE
+    URLS "https://github.com/morningfrog/vvcm-rs/releases/download/@VVCM_RS_RELEASE_TAG@/${VVCM_RS_ASSET_NAME}"
+    FILENAME "${VVCM_RS_ASSET_NAME}"
+    SHA512 "${VVCM_RS_SHA512}"
+)
+
+vcpkg_extract_source_archive(
+    VVCM_RS_SOURCE_PATH
+    ARCHIVE "${VVCM_RS_ARCHIVE}"
+)
+
+file(INSTALL "${VVCM_RS_SOURCE_PATH}/include/" DESTINATION "${CURRENT_PACKAGES_DIR}/include")
+
+function(vvcm_rs_install_profile PROFILE PACKAGE_SUBDIR)
+    set(linkage_dir "${VVCM_RS_SOURCE_PATH}/${VCPKG_LIBRARY_LINKAGE}")
+    if(PROFILE STREQUAL "debug")
+        set(linkage_dir "${linkage_dir}/debug")
+    endif()
+
+    if(VCPKG_LIBRARY_LINKAGE STREQUAL "dynamic")
+        if(VCPKG_TARGET_IS_WINDOWS)
+            file(INSTALL "${linkage_dir}/bin/vvcm_rs.dll" DESTINATION "${CURRENT_PACKAGES_DIR}/${PACKAGE_SUBDIR}bin")
+            file(INSTALL "${linkage_dir}/lib/vvcm_rs.lib" DESTINATION "${CURRENT_PACKAGES_DIR}/${PACKAGE_SUBDIR}lib")
+        elseif(VCPKG_TARGET_IS_OSX)
+            file(INSTALL "${linkage_dir}/lib/libvvcm_rs.dylib" DESTINATION "${CURRENT_PACKAGES_DIR}/${PACKAGE_SUBDIR}lib")
+        else()
+            file(INSTALL "${linkage_dir}/lib/libvvcm_rs.so" DESTINATION "${CURRENT_PACKAGES_DIR}/${PACKAGE_SUBDIR}lib")
+        endif()
+    else()
+        if(VCPKG_TARGET_IS_WINDOWS)
+            file(INSTALL "${linkage_dir}/lib/vvcm_rs.lib" DESTINATION "${CURRENT_PACKAGES_DIR}/${PACKAGE_SUBDIR}lib")
+        else()
+            file(INSTALL "${linkage_dir}/lib/libvvcm_rs.a" DESTINATION "${CURRENT_PACKAGES_DIR}/${PACKAGE_SUBDIR}lib")
+        endif()
+    endif()
+endfunction()
+
+if(NOT DEFINED VCPKG_BUILD_TYPE OR VCPKG_BUILD_TYPE STREQUAL "release")
+    vvcm_rs_install_profile(release "")
+endif()
+
+if(NOT DEFINED VCPKG_BUILD_TYPE OR VCPKG_BUILD_TYPE STREQUAL "debug")
+    vvcm_rs_install_profile(debug "debug/")
+endif()
+
+file(INSTALL
+    "${CURRENT_PORT_DIR}/vvcm-rs-config.cmake"
+    "${CURRENT_PORT_DIR}/usage"
+    DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}"
+)
+
+include(CMakePackageConfigHelpers)
+write_basic_package_version_file(
+    "${CURRENT_PACKAGES_DIR}/share/${PORT}/vvcm-rs-config-version.cmake"
+    VERSION "${VERSION}"
+    COMPATIBILITY SameMajorVersion
+)
+
+vcpkg_install_copyright(FILE_LIST "${VVCM_RS_SOURCE_PATH}/LICENSE")

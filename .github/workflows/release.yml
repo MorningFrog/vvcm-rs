@@ -103,12 +103,16 @@ jobs:
           vcpkg = json.loads(
               pathlib.Path("vcpkg/ports/vvcm-rs/vcpkg.json").read_text(encoding="utf-8")
           )
+          prebuilt_vcpkg = json.loads(
+              pathlib.Path("vcpkg/prebuilt-ports/vvcm-rs/vcpkg.json").read_text(encoding="utf-8")
+          )
 
           version = cargo["package"]["version"]
           versions = {
               "Cargo.toml": version,
               "pyproject.toml": pyproject["project"]["version"],
               "vcpkg/ports/vvcm-rs/vcpkg.json": vcpkg["version-semver"],
+              "vcpkg/prebuilt-ports/vvcm-rs/vcpkg.json": prebuilt_vcpkg["version-semver"],
           }
           mismatches = [
               f"{path}={value}"
@@ -219,10 +223,106 @@ jobs:
           path: release-notes.md
           if-no-files-found: error
 
+  build_native_artifacts:
+    name: Build native vcpkg artifacts
+    needs: validate_release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - triplet: x64-windows
+            os: windows-latest
+          - triplet: x64-linux
+            os: ubuntu-latest
+          - triplet: x64-osx
+            os: macos-13
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    env:
+      CARGO_TERM_COLOR: always
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup show
+
+      - name: Build native library
+        run: |
+          cargo build --lib --locked
+          cargo build --lib --locked --release
+
+      - name: Package native artifact
+        run: |
+          python scripts/package_vcpkg_native.py \
+            --version "${{ needs.validate_release.outputs.version }}" \
+            --triplet "${{ matrix.triplet }}"
+
+      - name: Upload native artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-dist-${{ matrix.triplet }}
+          path: native-dist/*.zip
+          if-no-files-found: error
+
+  package_prebuilt_vcpkg:
+    name: Package prebuilt vcpkg overlay
+    needs:
+      - validate_release
+      - build_native_artifacts
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Download native artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: native-dist-*
+          path: native-dist
+          merge-multiple: true
+
+      - name: Build prebuilt overlay archive
+        run: |
+          python scripts/package_vcpkg_prebuilt_port.py \
+            --version "${{ needs.validate_release.outputs.version }}"
+
+      - name: Upload prebuilt vcpkg overlay
+        uses: actions/upload-artifact@v7
+        with:
+          name: prebuilt-vcpkg-dist
+          path: prebuilt-vcpkg-dist/*.zip
+          if-no-files-found: error
+
   validate_pypi_trusted_publisher:
     name: Validate PyPI Trusted Publisher
     if: ${{ inputs['dry-run'] }}
-    needs: validate_release
+    needs:
+      - validate_release
+      - build_native_artifacts
+      - package_prebuilt_vcpkg
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
@@ -287,7 +387,10 @@ jobs:
   publish:
     name: Publish release
     if: ${{ !inputs['dry-run'] }}
-    needs: validate_release
+    needs:
+      - validate_release
+      - build_native_artifacts
+      - package_prebuilt_vcpkg
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
@@ -324,6 +427,19 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: release-dist
+          path: release-dist
+
+      - name: Download native assets
+        uses: actions/download-artifact@v8
+        with:
+          pattern: native-dist-*
+          path: release-dist
+          merge-multiple: true
+
+      - name: Download prebuilt vcpkg overlay
+        uses: actions/download-artifact@v8
+        with:
+          name: prebuilt-vcpkg-dist
           path: release-dist
 
       - name: Download release notes

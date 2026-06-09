@@ -97,6 +97,10 @@ exports:
   binding tests.
 * `vcpkg/ports/vvcm-rs/` contains the repo-local vcpkg overlay port and its
   packaging metadata.
+* `vcpkg/prebuilt-ports/vvcm-rs/` contains the template used to generate the
+  prebuilt x64 vcpkg overlay archive published with releases.
+* `scripts/` contains packaging helpers for native release zips and the
+  generated prebuilt vcpkg overlay archive.
 * `.github/workflows/` contains CI and release automation, including the
   published release workflow.
 * Root metadata files such as `Cargo.toml`, `pyproject.toml`, `README.md`,
@@ -192,6 +196,9 @@ Releases are published only by authors or collaborators through the GitHub
 Actions workflow named "Release". Do not publish packages, create tags, or
 create GitHub releases manually from a local machine. The workflow itself is
 the release path, and it is triggered by hand when a release is ready.
+
+The release workflow validates the Rust, Python, source overlay, native x64
+package, and prebuilt vcpkg overlay artifacts before publishing the release.
 
 ## Issue Guidelines
 

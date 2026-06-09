@@ -45,6 +45,7 @@ pub mod simulation;
 pub mod types;
 
 mod math;
+#[cfg(feature = "python-extension")]
 mod python;
 
 pub use error::VvcmError;

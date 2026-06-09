@@ -18,11 +18,11 @@ crate-type = ["rlib", "cdylib", "staticlib"]
 
 [features]
 default = []
-python-extension = ["pyo3/extension-module"]
+python-extension = ["dep:pyo3", "pyo3/extension-module"]
 
 [dependencies]
 nalgebra = "0.35.0"
-pyo3 = "0.28.3"
+pyo3 = { version = "0.28.3", optional = true }
 thiserror = "2.0.18"
 
 [dev-dependencies]

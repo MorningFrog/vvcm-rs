@@ -1,7 +1,10 @@
 # TODO
 
-Release packaging is complete. Remaining follow-up work:
+Release packaging is complete for the current x64 prebuilt overlays. Remaining
+follow-up work:
 
 - Broaden numerical regression tests across additional robot and sheet
   configurations.
+- Consider adding additional prebuilt triplets if demand grows beyond the
+  current x64 Windows, Linux, and macOS coverage.
 - Expand documentation for algorithm details and expected numeric tolerances.

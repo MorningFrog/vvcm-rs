@@ -2,7 +2,14 @@
 
 ## Unreleased
 
-- No unreleased changes.
+- Added x64 native C/C++ release artifact packaging for Windows, Linux, and
+  macOS.
+- Added a generated prebuilt vcpkg overlay archive so supported x64 users can
+  install the native C/C++ package without installing Rust.
+- Kept the repo-local source vcpkg overlay available for source builds,
+  development workflows, and non-prebuilt targets.
+- Made the native Rust build path independent of the Python interpreter so the
+  source vcpkg overlay can build without Python installed.
 
 ## 1.0.0 - 2026-06-09
 
