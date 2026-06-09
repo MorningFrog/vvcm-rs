@@ -197,8 +197,10 @@ Actions workflow named "Release". Do not publish packages, create tags, or
 create GitHub releases manually from a local machine. The workflow itself is
 the release path, and it is triggered by hand when a release is ready.
 
-The release workflow validates the Rust, Python, source overlay, native x64
-package, and prebuilt vcpkg overlay artifacts before publishing the release.
+The release workflow validates the Rust checks, the Python sdist, the CPython
+3.10 through 3.14 wheel matrix, the source overlay, native x64 package, and
+the prebuilt vcpkg overlay artifacts, then creates the Git tag and GitHub
+release before publishing to crates.io and PyPI.
 
 ## Issue Guidelines
 

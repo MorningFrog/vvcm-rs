@@ -10,6 +10,10 @@
   development workflows, and non-prebuilt targets.
 - Made the native Rust build path independent of the Python interpreter so the
   source vcpkg overlay can build without Python installed.
+- Expanded Python release coverage to build and test wheels for CPython 3.10
+  through 3.14, while keeping the sdist for source installs.
+- Hardened the release workflow by smoke-testing the generated prebuilt vcpkg
+  overlay and by creating the GitHub release before crates.io and PyPI uploads.
 
 ## 1.0.0 - 2026-06-09
 

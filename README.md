@@ -57,9 +57,10 @@ For the original VVCM model, please cite:
 - C and C++ exports are available through `include/vvcm_rs.h` and the
   header-only C++ wrapper `include/vvcm_rs.hpp`. The crate builds native
   `cdylib` and `staticlib` artifacts for external linking.
-- Python bindings are available through the `vvcm_rs` package. The wheel ships
-  typed Python package files (`py.typed` and `__init__.pyi`) so editors and type
-  checkers can inspect the exported classes.
+- Python bindings are available through the `vvcm_rs` package. The release
+  workflow publishes wheels for CPython 3.10 through 3.14 plus an sdist, and
+  the wheel ships typed Python package files (`py.typed` and `__init__.pyi`) so
+  editors and type checkers can inspect the exported classes.
 - The `1.0.0` release is published on crates.io, PyPI, GitHub Releases, and
   vcpkg overlay archives; the repo-local `vcpkg/ports/vvcm-rs` tree remains
   available for overlay-based source builds, and `vcpkg/prebuilt-ports/vvcm-rs`
