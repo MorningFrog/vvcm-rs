@@ -36,11 +36,11 @@ For the original VVCM model, please cite:
 }
 ```
 
-## Published Release
+## Features
 
-Version `1.0.0` (2026-06-10) is the first public release of `vvcm-rs`.
+This package includes `vvcm-rs` for Rust, Python, and C/C++ users with:
 
-- Rust VVCM forward-kinematics API with `Point2`, `Point3`, `RobotFormation`, `SheetShape`, and `FkSolution`.
+- A Rust VVCM forward-kinematics API built around `Point2`, `Point3`, `RobotFormation`, `SheetShape`, and `FkSolution`.
 - Stable-solution search with taut-cable enumeration, candidate solving, and stable-branch filtering.
 - Velocity-driven and manual simulation wrappers.
 - Python bindings published as `vvcm-rs` / `vvcm_rs` with typed package metadata.
