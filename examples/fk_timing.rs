@@ -5,6 +5,7 @@ use std::time::Instant;
 use vvcm_rs::{Point2, RobotFormation, SheetShape, VvcmFk};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Use a larger 20-robot ring on the world-frame XY plane to measure solve time on a heavier problem.
     let formation = RobotFormation::new(vec![
         Point2::new(576.276881720430, 162.627551020408),
         Point2::new(636.088709677419, 181.760204081633),
@@ -28,6 +29,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Point2::new(542.674731182796, 188.137755102041),
     ])?;
 
+    // The matching sheet contour in the sheet-local XY frame for the same timing scenario.
     let sheet = SheetShape::new(vec![
         Point2::new(512.432795698925, 55.4846938775513),
         Point2::new(621.975806451613, 59.3112244897961),
@@ -53,14 +55,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("----------------------");
 
+    // Build the solver and time a single stable-solution update.
     let mut fk = VvcmFk::new(20, 1000.0, sheet)?;
     let start = Instant::now();
     let solutions = fk.update_stable_solutions(formation)?;
     let elapsed = start.elapsed();
 
+    // Print the solve time and the number of stable branches found.
     println!("{:.6}s", elapsed.as_secs_f64());
     println!("M: {}", solutions.stable_count());
 
+    // Dump the stable object positions first.
     println!("Po:");
     for solution in solutions.stable() {
         println!(
@@ -69,6 +74,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
+    // Then dump the matching planar velocities.
     println!("Vo:");
     for solution in solutions.stable() {
         println!("{:.3} {:.3}", solution.vo.x, solution.vo.y);

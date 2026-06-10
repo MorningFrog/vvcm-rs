@@ -7,6 +7,7 @@
 
 namespace
 {
+    // Stop immediately with a readable message when a check fails.
     void require(bool condition, const char *message)
     {
         if (!condition)
@@ -16,16 +17,19 @@ namespace
         }
     }
 
+    // Compare floating-point values with a tolerance because the solver is approximate.
     bool close_to(float actual, float expected, float tolerance)
     {
         return std::fabs(actual - expected) <= tolerance;
     }
 
+    // Compare 2D points component-wise within the requested tolerance.
     void require_point2(const vvcm_rs::Point2 &actual, const vvcm_rs::Point2 &expected, float tolerance, const char *message)
     {
         require(close_to(actual.x, expected.x, tolerance) && close_to(actual.y, expected.y, tolerance), message);
     }
 
+    // Compare 3D points component-wise within the requested tolerance.
     void require_point3(const vvcm_rs::Point3 &actual, const vvcm_rs::Point3 &expected, float tolerance, const char *message)
     {
         require(close_to(actual.x, expected.x, tolerance) && close_to(actual.y, expected.y, tolerance) && close_to(actual.z, expected.z, tolerance), message);
@@ -36,8 +40,10 @@ int main()
 {
     using namespace vvcm_rs;
 
+    // The exported package should report a usable version string.
     require(!version().empty(), "version should not be empty");
 
+    // Robot endpoints on the world-frame XY plane, using the millimeter-scale README sample.
     const std::vector<Point2> formation = {
         Point2(213.7f, 122.7f),
         Point2(804.6f, 37.2f),
@@ -45,6 +51,7 @@ int main()
         Point2(439.3f, 715.9f),
     };
 
+    // Sheet vertices in the sheet-local XY frame, using the same millimeter-scale sample data.
     const std::vector<Point2> sheet = {
         Point2(-316.1f, -421.9f),
         Point2(803.4f, -384.1f),
@@ -52,16 +59,19 @@ int main()
         Point2(-367.3f, 664.2f),
     };
 
+    // Build the solver and confirm its basic configuration matches the inputs.
     VvcmFk fk(4, 1000.0f, sheet);
     require(fk.robot_count() == 4, "unexpected robot count");
     require(close_to(fk.hold_height(), 1000.0f, 0.001f), "unexpected hold height");
 
+    // Solving once should populate both the full candidate set and the stable subset.
     FkSolutions solutions = fk.update_stable_solutions(formation);
     require(solutions.all_count() == 3, "unexpected solution count");
     require(solutions.stable_count() == 2, "unexpected stable solution count");
     require(fk.solution_count() == 3, "unexpected cached solution count");
     require(fk.stable_solution_count() == 2, "unexpected cached stable solution count");
 
+    // The stable branches should match the known reference poses.
     const std::vector<FkSolution> stable = solutions.stable();
     require(stable.size() == 2, "unexpected stable vector size");
     require_point3(stable[0].po, Point3(568.8123f, 324.72644f, 336.73608f), 0.05f, "first stable Po mismatch");
@@ -71,6 +81,7 @@ int main()
     require_point2(stable[1].vo, Point2(208.79898f, 152.53357f), 0.05f, "second stable Vo mismatch");
     require(stable[1].taut_cables.size() == 3 && stable[1].taut_cables[0] == 0 && stable[1].taut_cables[1] == 2 && stable[1].taut_cables[2] == 3, "second stable taut cable set mismatch");
 
+    // Exercise the velocity-driven simulation wrapper with the shared six-robot fixture.
     VvcmSimulation simulation(6, 823.0f, {
         Point2(-131.665741f, -376.508026f),
         Point2(480.675873f, -388.066681f),
@@ -86,6 +97,7 @@ int main()
         Point2(-175.608231f, 569.463562f),
         Point2(-301.437988f, 194.695297f),
     });
+    // The initial state should match the documented reference solution.
     require_point2(simulation.global_position(), Point2(-27.419184f, -176.293854f), 0.001f, "simulation global position mismatch");
     require_point2(simulation.formation().front(), Point2::zero(), 0.001f, "simulation local origin mismatch");
     require_point3(simulation.object_position(), Point3(137.674f, 420.879f, 301.218f), 0.2f, "simulation object position mismatch");
@@ -101,9 +113,11 @@ int main()
         Point2::zero(),
     });
     simulation.step();
+    // A zero-velocity step should leave the pose unchanged.
     require_point2(simulation.global_position(), Point2(-27.252517f, -176.12718f), 0.01f, "simulation global position after step mismatch");
     require_point2(simulation.formation()[1], Point2(425.394f, 140.937f), 0.02f, "simulation updated formation mismatch");
 
+    // Manual simulation starts from the same sheet but waits for an explicit formation at init.
     VvcmManualSimulation manual(6, 823.0f, {
         Point2(-131.665741f, -376.508026f),
         Point2(480.675873f, -388.066681f),
@@ -115,6 +129,7 @@ int main()
     require(!manual.has_formation(), "manual simulation should not be initialized yet");
     require_point2(manual.global_position(), Point2::zero(), 0.001f, "manual simulation origin mismatch");
 
+    // Initialize the manual simulation at the world origin and capture the selected branch.
     const Point3 manual_initial = manual.init({
         Point2(-27.419184f, -176.293854f),
         Point2(398.141083f, -35.190411f),
@@ -132,6 +147,7 @@ int main()
     require(manual.has_solution_index(), "manual simulation should have a selected solution");
     require(!manual.taut_cables().empty(), "manual simulation taut cables should not be empty");
 
+    // Re-running the same formation should keep the same stable branch.
     const Point3 manual_next = manual.get_new_stable_solution({
         Point2(-27.419184f, -176.293854f),
         Point2(398.141083f, -35.190411f),

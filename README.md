@@ -112,6 +112,7 @@ After adding `vvcm-rs` from crates.io, the Rust API looks like this:
 ```rust
 use vvcm_rs::{Point2, RobotFormation, SheetShape, VvcmFk};
 
+// Robot endpoints on the world-frame XY plane, using the millimeter scale of the sample data.
 let formation = RobotFormation::new(vec![
     Point2::new(213.7, 122.7),
     Point2::new(804.6, 37.2),
@@ -119,6 +120,7 @@ let formation = RobotFormation::new(vec![
     Point2::new(439.3, 715.9),
 ])?;
 
+// Sheet vertices in the sheet-local XY frame, using the same millimeter scale.
 let sheet = SheetShape::new(vec![
     Point2::new(-316.1, -421.9),
     Point2::new(803.4, -384.1),
@@ -126,12 +128,18 @@ let sheet = SheetShape::new(vec![
     Point2::new(-367.3, 664.2),
 ])?;
 
+// Create the FK solver for four robots with a 1000 mm hold height.
 let mut fk = VvcmFk::new(4, 1000.0, sheet)?;
+
+// Ask the solver to enumerate every candidate equilibrium for this formation.
 let solutions = fk.update_stable_solutions(formation)?;
+
+// Only stable branches are usually useful to downstream code.
 for solution in solutions.stable() {
     println!("{:?}", solution.po);
 }
-# Ok::<(), vvcm_rs::VvcmError>(())
+// Keep the snippet valid when pasted into a Result-returning main function.
+Ok::<(), vvcm_rs::VvcmError>(())
 ```
 
 ### C++ Usage
@@ -152,22 +160,28 @@ target_link_libraries(app PRIVATE vvcm_rs::vvcm_rs)
 int main() {
     using namespace vvcm_rs;
 
-    std::vector<Point2> formation = {
+    // Robot endpoints on the world-frame XY plane, using the millimeter scale of the sample data.
+    const std::vector<Point2> formation = {
         Point2(213.7f, 122.7f),
         Point2(804.6f, 37.2f),
         Point2(904.0f, 550.0f),
         Point2(439.3f, 715.9f),
     };
-    std::vector<Point2> sheet = {
+
+    // Sheet vertices in the sheet-local XY frame, using the same millimeter scale.
+    const std::vector<Point2> sheet = {
         Point2(-316.1f, -421.9f),
         Point2(803.4f, -384.1f),
         Point2(746.1f, 712.8f),
         Point2(-367.3f, 664.2f),
     };
 
+    // Build the solver for four robots and a 1000 mm hold height.
     VvcmFk fk(4, 1000.0f, sheet);
+    // Solve all candidate equilibria for the current formation.
     FkSolutions solutions = fk.update_stable_solutions(formation);
 
+    // Downstream code usually consumes only the stable branches.
     for (const auto &solution : solutions.stable()) {
         std::cout << solution.po.x << " "
                   << solution.po.y << " "
@@ -183,12 +197,14 @@ After installing `vvcm-rs` from PyPI, import it as `vvcm_rs`. Coordinate collect
 ```python
 from vvcm_rs import VvcmFk
 
+# Robot endpoints on the world-frame XY plane, written here as millimeter-valued tuples.
 formation = [
     (213.7, 122.7),
     (804.6, 37.2),
     (904.0, 550.0),
     (439.3, 715.9),
 ]
+# Sheet vertices in the sheet-local XY frame, written here as millimeter-valued tuples.
 sheet = [
     (-316.1, -421.9),
     (803.4, -384.1),
@@ -196,9 +212,12 @@ sheet = [
     (-367.3, 664.2),
 ]
 
+# Create the solver for four robots and a 1000 mm hold height.
 fk = VvcmFk(4, 1000.0, sheet)
+# Solve the stable branches for the current formation.
 solutions = fk.update_stable_solutions(formation)
 
+# Print each stable branch's object pose, planar velocity, and taut cables.
 for solution in solutions.stable():
     print(solution.po.as_tuple(), solution.vo.as_tuple(), solution.taut_cables)
 ```
