@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.1.0 - Unreleased
+## 1.1.0 - 2026-06-11
 
 - Added automatic FK coordinate normalization to improve numerical stability for small or translated inputs while returning results in the caller's original coordinate frames.
 - Added typed Python solve exceptions and C++ wrapper error-code access so callers can distinguish infeasible, no-solution, and no-stable-solution failures without parsing messages.
