@@ -124,33 +124,14 @@ find_package(vvcm-rs CONFIG REQUIRED)
 target_link_libraries(app PRIVATE vvcm_rs::vvcm_rs)
 ```
 
-## Quick Start
+## Usage
 
-Run the smoke tests. The C++ export smoke test requires a C++17 compiler:
+The language-specific snippets below assume installation is already complete.
+Choose the section that matches your project.
 
-```shell
-cargo test
-```
+### Rust Usage
 
-Run only the C++ export smoke test:
-
-```shell
-cargo test --test cpp_export_smoke
-```
-
-Run the basic forward-kinematics example:
-
-```shell
-cargo run --example basic_fk
-```
-
-Run the 20-robot FK timing benchmark example in release mode:
-
-```shell
-cargo run --release --example fk_timing
-```
-
-Example API shape:
+After adding `vvcm-rs` from crates.io, the Rust API looks like this:
 
 ```rust
 use vvcm_rs::{Point2, RobotFormation, SheetShape, VvcmFk};
@@ -177,27 +158,19 @@ for solution in solutions.stable() {
 # Ok::<(), vvcm_rs::VvcmError>(())
 ```
 
-## C++ Usage
+### C++ Usage
 
-Build the native library artifacts:
+After installing the vcpkg package or a release archive, consume the installed
+CMake package and headers directly. The package exports the raw C ABI in
+`vvcm_rs.h` and the C++17 RAII wrapper in `vvcm_rs.hpp`.
 
-```shell
-cargo build --lib
+```cmake
+find_package(vvcm-rs CONFIG REQUIRED)
+target_link_libraries(app PRIVATE vvcm_rs::vvcm_rs)
 ```
 
-On Windows this produces `target/debug/vvcm_rs.dll`,
-`target/debug/vvcm_rs.dll.lib`, and `target/debug/vvcm_rs.lib`. On Linux and
-macOS, link against the generated `libvvcm_rs` shared or static library under
-the corresponding target profile directory.
-
-Include `include/vvcm_rs.hpp` for the C++17 RAII wrapper, or
-`include/vvcm_rs.h` for the raw C ABI. The C++ wrapper accepts ordinary
-`std::vector<vvcm_rs::Point2>` coordinate lists, exposes `VvcmFk`,
-`VvcmSimulation`, and `VvcmManualSimulation`, and throws `vvcm_rs::Error` when
-the Rust solver reports an error.
-
 ```cpp
-#include "vvcm_rs.hpp"
+#include <vvcm_rs.hpp>
 
 #include <iostream>
 #include <vector>
@@ -229,28 +202,11 @@ int main() {
 }
 ```
 
-## Python Usage
+### Python Usage
 
-Install the published package from PyPI:
-
-```shell
-python -m pip install vvcm-rs
-```
-
-Build and install the Python extension in a virtual environment:
-
-```shell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip maturin pytest numpy
-maturin develop
-python -m pytest tests/python
-```
-
-The Python package name on PyPI is `vvcm-rs`, and the import name is
-`vvcm_rs`. Coordinate collections accept `Point2` values, ordinary
-`list`/`tuple` rows, or sequence-like two-column arrays such as NumPy `N x 2`
-arrays.
+After installing `vvcm-rs` from PyPI, import it as `vvcm_rs`. Coordinate
+collections accept `Point2` values, ordinary `list`/`tuple` rows, or
+sequence-like two-column arrays such as NumPy `N x 2` arrays.
 
 ```python
 from vvcm_rs import VvcmFk
