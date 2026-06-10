@@ -75,7 +75,91 @@ python -m venv .venv
 python -m pip install --upgrade pip maturin pytest numpy
 ```
 
-### 4. Start the Example
+### 4. Install Packages From Source
+
+Use these commands when you need to test local source changes before a published release exists.
+
+#### Rust
+
+`vvcm-rs` is a library crate, so Rust projects normally consume a local checkout as a path dependency. From another Rust project, run:
+
+```bash
+cargo add vvcm-rs --path <path-to-vvcm-rs>
+```
+
+or edit `Cargo.toml` directly:
+
+```toml
+[dependencies]
+vvcm-rs = { path = "<path-to-vvcm-rs>" }
+```
+
+Build the local Rust library with the standard Cargo profiles:
+
+```bash
+cargo build --lib
+cargo build --lib --release
+```
+
+The debug build writes artifacts under `target/debug`; the release build writes optimized artifacts under `target/release`.
+
+#### C and C++
+
+Use the repo-local vcpkg overlay port for C/C++ source installs. It builds the native Rust library with Cargo and installs the C header, C++17 wrapper, and CMake package metadata:
+
+```bash
+vcpkg install vvcm-rs --overlay-ports=<path-to-vvcm-rs>/vcpkg/ports --triplet <triplet>
+```
+
+With the default vcpkg triplets, the port builds both Cargo profiles: `cargo build --lib --locked` for debug and `cargo build --lib --locked --release` for release. The installed debug library is placed under the vcpkg `debug/lib` directory, and the release library is placed under `lib`.
+
+For debug-only or release-only installs, use a custom triplet based on your platform triplet and set `VCPKG_BUILD_TYPE`:
+
+```cmake
+set(VCPKG_BUILD_TYPE debug)
+```
+
+or:
+
+```cmake
+set(VCPKG_BUILD_TYPE release)
+```
+
+Then pass that triplet to `vcpkg install`:
+
+```bash
+vcpkg install vvcm-rs --overlay-ports=<path-to-vvcm-rs>/vcpkg/ports --overlay-triplets=<path-to-triplets> --triplet <debug-or-release-triplet>
+```
+
+After installation, consume the package from CMake:
+
+```cmake
+find_package(vvcm-rs CONFIG REQUIRED)
+target_link_libraries(app PRIVATE vvcm_rs::vvcm_rs)
+```
+
+#### Python
+
+Install the Python package from the source tree into the active virtual environment with maturin. The debug install is useful while developing because `maturin develop` uses Cargo's debug profile by default:
+
+```bash
+maturin develop
+```
+
+Use a release build when you need optimized Python extension performance:
+
+```bash
+maturin develop --release
+```
+
+To build a distributable wheel from source, use the release build:
+
+```bash
+maturin build --release --locked --out dist
+python -m pip install --force-reinstall dist/<wheel-file>.whl
+```
+
+### 5. Start the Example
 
 ```bash
 cargo run --example basic_fk

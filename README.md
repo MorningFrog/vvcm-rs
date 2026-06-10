@@ -42,31 +42,14 @@ For the original VVCM model, please cite:
 
 ## Published Release
 
-- Public API uses Rust domain types such as `Point2`, `Point3`,
-  `RobotFormation`, `SheetShape`, and `FkSolution`.
-- FK results are stored as one list of `FkSolution` values; each solution has a
-  `stable` flag for filtering locally stable branches.
-- `nalgebra` is kept as an internal numerical backend, not as the main public
-  interface.
-- `VvcmFk::update_stable_solutions` enumerates taut cable sets, solves candidate
-  forward-kinematics states, and marks stable solutions.
-- `VvcmSimulation` integrates robot velocities over a fixed time step and keeps
-  the closest stable FK branch.
-- `VvcmManualSimulation` returns the closest stable FK branch for externally
-  supplied robot formations.
-- C and C++ exports are available through `include/vvcm_rs.h` and the
-  header-only C++ wrapper `include/vvcm_rs.hpp`. The crate builds native
-  `cdylib` and `staticlib` artifacts for external linking.
-- Python bindings are available through the `vvcm_rs` package. The release
-  workflow publishes wheels for CPython 3.10 through 3.14 plus an sdist, and
-  the wheel ships typed Python package files (`py.typed` and `__init__.pyi`) so
-  editors and type checkers can inspect the exported classes.
-- The `1.0.0` release is published on crates.io, PyPI, GitHub Releases, and
-  vcpkg overlay archives; the repo-local `vcpkg/ports/vvcm-rs` tree remains
-  available for overlay-based source builds, and `vcpkg/prebuilt-ports/vvcm-rs`
-  defines the generated prebuilt overlay used for fast x64 installs.
-- The GitHub Actions `Release` workflow remains available for future version
-  bumps and validation runs.
+Version `1.0.0` (2026-06-10) is the first public release of `vvcm-rs`.
+
+- Rust VVCM forward-kinematics API with `Point2`, `Point3`, `RobotFormation`, `SheetShape`, and `FkSolution`.
+- Stable-solution search with taut-cable enumeration, candidate solving, and stable-branch filtering.
+- Velocity-driven and manual simulation wrappers.
+- Python bindings published as `vvcm-rs` / `vvcm_rs` with typed package metadata.
+- C ABI and C++17 wrapper headers for native consumers.
+- Distribution through crates.io, PyPI, GitHub Releases, and vcpkg overlays.
 
 ## Module Overview
 
@@ -79,6 +62,8 @@ For the original VVCM model, please cite:
 - `error`: crate error type.
 
 ## Installation
+
+For source-based installation or local development, read [CONTRIBUTING.md](CONTRIBUTING.md) first.
 
 ### Rust
 
