@@ -48,7 +48,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install --upgrade maturin twine pytest numpy
 
-      - name: Check crates.io credential
+      - name: Check crates.io secret
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |
@@ -67,12 +67,8 @@ jobs:
               raise SystemExit("CARGO_REGISTRY_TOKEN looks too short to be a usable crates.io token.")
           PY
 
-          if cargo owner --list --registry crates-io >/dev/null; then
-            echo "crates.io accepted CARGO_REGISTRY_TOKEN."
-          else
-            echo "::error title=Invalid crates.io token::CARGO_REGISTRY_TOKEN could not authenticate against the crates.io owners API."
-            exit 1
-          fi
+          echo "CARGO_REGISTRY_TOKEN is configured."
+          echo "Skipping crates.io owner lookup because vvcm-rs may not exist before the first release."
 
       - name: Read release version
         id: version
