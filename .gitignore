@@ -2,6 +2,13 @@
 /.venv
 /.pytest_cache
 /dist
+/python-dist
+/python-test-dist
+/release-dist
+/release-notes
+/release-notes.md
+/native-dist
+/prebuilt-vcpkg-dist
 /*.egg-info
 __pycache__/
 *.pyc

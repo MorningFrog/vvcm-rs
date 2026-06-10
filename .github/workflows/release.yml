@@ -622,7 +622,10 @@ jobs:
             --notes-file release-notes/release-notes.md
 
       - name: Publish crate to crates.io
-        run: cargo publish --locked
+        run: |
+          git worktree add --detach "$RUNNER_TEMP/cargo-publish-src" HEAD
+          cd "$RUNNER_TEMP/cargo-publish-src"
+          cargo publish --locked
 
       - name: Publish Python distributions to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
