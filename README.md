@@ -81,10 +81,10 @@ python -m pip install vvcm-rs
 Install the prebuilt package from the GitHub release archive:
 
 ```shell
-vcpkg install vvcm-rs --overlay-ports=<path-to-unzipped-release>/ports --triplet <x64-triplet>
+vcpkg install vvcm-rs --overlay-ports=<path-to-unzipped-release>/ports --triplet <platform-triplet>
 ```
 
-The prebuilt overlay ships native x64 packages for Windows, Linux, and macOS. It does not require Rust. Use the triplet that matches your platform, such as `x64-windows`, `x64-linux`, or `x64-osx`.
+The prebuilt overlay ships native packages for Windows x64, Linux x64, and macOS arm64. It does not require Rust. Use the triplet that matches your platform, such as `x64-windows`, `x64-linux`, or `arm64-osx`.
 
 If you want to build from the repository source instead, use the repo-local overlay port. That overlay builds the native Rust library with Cargo, so Rust must be installed on the machine running vcpkg. Python is only needed when you build the Python extension feature:
 

@@ -10,7 +10,7 @@ import zipfile
 from pathlib import Path
 
 
-SUPPORTED_TRIPLETS = ("x64-windows", "x64-linux", "x64-osx")
+SUPPORTED_TRIPLETS = ("x64-windows", "x64-linux", "arm64-osx")
 PROFILES = ("release", "debug")
 
 
@@ -106,7 +106,7 @@ def main() -> None:
             package_windows(target_dir, package_root)
         elif args.triplet == "x64-linux":
             package_unix(target_dir, package_root, "libvvcm_rs.so")
-        elif args.triplet == "x64-osx":
+        elif args.triplet == "arm64-osx":
             package_unix(target_dir, package_root, "libvvcm_rs.dylib")
         else:
             raise SystemExit(f"unsupported triplet: {args.triplet}")

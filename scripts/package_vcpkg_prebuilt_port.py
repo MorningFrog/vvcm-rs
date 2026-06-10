@@ -12,7 +12,7 @@ import zipfile
 from pathlib import Path
 
 
-SUPPORTED_TRIPLETS = ("x64-windows", "x64-linux", "x64-osx")
+SUPPORTED_TRIPLETS = ("x64-windows", "x64-linux", "arm64-osx")
 
 
 def parse_args() -> argparse.Namespace:
@@ -45,7 +45,7 @@ def render_portfile(template_dir: Path, port_dir: Path, version: str, hashes: di
         "@VVCM_RS_RELEASE_TAG@": f"v{version}",
         "@VVCM_RS_SHA512_X64_WINDOWS@": hashes["x64-windows"],
         "@VVCM_RS_SHA512_X64_LINUX@": hashes["x64-linux"],
-        "@VVCM_RS_SHA512_X64_OSX@": hashes["x64-osx"],
+        "@VVCM_RS_SHA512_ARM64_OSX@": hashes["arm64-osx"],
     }
     for token, value in values.items():
         template = template.replace(token, value)
@@ -71,7 +71,7 @@ def write_readme(root: Path, version: str) -> None:
                 "vcpkg install vvcm-rs --overlay-ports=<this-directory>/ports --triplet x64-windows",
                 "```",
                 "",
-                "Supported prebuilt asset triplets: x64-windows, x64-linux, x64-osx.",
+                "Supported prebuilt asset triplets: x64-windows, x64-linux, arm64-osx.",
                 "The overlay downloads native binaries from the matching GitHub Release and does not require Rust.",
                 "",
             ]

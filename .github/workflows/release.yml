@@ -222,8 +222,8 @@ jobs:
             os: windows-latest
           - triplet: x64-linux
             os: ubuntu-latest
-          - triplet: x64-osx
-            os: macos-13
+          - triplet: arm64-osx
+            os: macos-14
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
@@ -253,10 +253,10 @@ jobs:
           cargo build --lib --locked --release
 
       - name: Package native artifact
-        run: |
-          python scripts/package_vcpkg_native.py \
-            --version "${{ needs.validate_release.outputs.version }}" \
-            --triplet "${{ matrix.triplet }}"
+        run: >
+          python scripts/package_vcpkg_native.py
+          --version "${{ needs.validate_release.outputs.version }}"
+          --triplet "${{ matrix.triplet }}"
 
       - name: Upload native artifact
         uses: actions/upload-artifact@v7

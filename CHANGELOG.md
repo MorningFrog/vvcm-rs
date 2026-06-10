@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Switch the prebuilt macOS native artifacts and vcpkg overlay to `arm64-osx`.
+- Update the release workflow and packaging docs to match the Apple Silicon release artifacts.
+
 ## 1.0.0 - 2026-06-10
 
 - First public release of `vvcm-rs`.
