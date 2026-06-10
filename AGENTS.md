@@ -21,3 +21,7 @@ Update these files when changes affect:
 * Any information that would help future contributors understand or maintain the project
 
 Do not leave documentation outdated when code changes alter how the project is used, developed, or maintained.
+
+## Markdown Formatting
+
+When writing or editing Markdown files, keep normal prose and list items on a single line unless a hard line break is semantically required. In Markdown, a single newline usually renders like a space, so avoid inserting visual-wrap line breaks in paragraphs, bullets, or similar text. Preserve intentional structure such as blank lines between paragraphs, code blocks, tables, and explicit line breaks.

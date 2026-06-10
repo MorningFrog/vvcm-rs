@@ -1,14 +1,10 @@
 # vvcm-rs
 
-Rust implementation of the Virtual Variable Cables Model (VVCM) forward
-kinematics algorithm for multi-robot transportation with a deformable sheet.
+Rust implementation of the Virtual Variable Cables Model (VVCM) forward kinematics algorithm for multi-robot transportation with a deformable sheet.
 
-`vvcm-rs` is an independent Rust crate for evaluating VVCM forward kinematics
-and simulation workflows. The forward kinematics core and simulation wrappers
-are implemented in Rust.
+`vvcm-rs` is an independent Rust crate for evaluating VVCM forward kinematics and simulation workflows. The forward kinematics core and simulation wrappers are implemented in Rust.
 
-If you plan to modify the codebase, read [CONTRIBUTING.md](CONTRIBUTING.md)
-first for workflow, structure, and release expectations.
+If you plan to modify the codebase, read [CONTRIBUTING.md](CONTRIBUTING.md) first for workflow, structure, and release expectations.
 
 ## Citation
 
@@ -55,8 +51,7 @@ Version `1.0.0` (2026-06-10) is the first public release of `vvcm-rs`.
 
 - `fk`: forward kinematics engine state and stable-solution entry point.
 - `simulation`: velocity-driven simulation wrapper.
-- `manual_simulation`: wrapper for querying a new stable solution from an
-  externally provided robot formation.
+- `manual_simulation`: wrapper for querying a new stable solution from an externally provided robot formation.
 - `types`: public domain types used by the Rust API.
 - `ffi`: C ABI implementation behind the C/C++ headers.
 - `error`: crate error type.
@@ -89,14 +84,9 @@ Install the prebuilt package from the GitHub release archive:
 vcpkg install vvcm-rs --overlay-ports=<path-to-unzipped-release>/ports --triplet <x64-triplet>
 ```
 
-The prebuilt overlay ships native x64 packages for Windows, Linux, and macOS.
-It does not require Rust. Use the triplet that matches your platform, such as
-`x64-windows`, `x64-linux`, or `x64-osx`.
+The prebuilt overlay ships native x64 packages for Windows, Linux, and macOS. It does not require Rust. Use the triplet that matches your platform, such as `x64-windows`, `x64-linux`, or `x64-osx`.
 
-If you want to build from the repository source instead, use the repo-local
-overlay port. That overlay builds the native Rust library with Cargo, so Rust
-must be installed on the machine running vcpkg. Python is only needed when you
-build the Python extension feature:
+If you want to build from the repository source instead, use the repo-local overlay port. That overlay builds the native Rust library with Cargo, so Rust must be installed on the machine running vcpkg. Python is only needed when you build the Python extension feature:
 
 ```shell
 vcpkg install vvcm-rs --overlay-ports=<path-to-vvcm-rs>/vcpkg/ports
@@ -111,8 +101,7 @@ target_link_libraries(app PRIVATE vvcm_rs::vvcm_rs)
 
 ## Usage
 
-The language-specific snippets below assume installation is already complete.
-Choose the section that matches your project.
+The language-specific snippets below assume installation is already complete. Choose the section that matches your project.
 
 ### Rust Usage
 
@@ -145,9 +134,7 @@ for solution in solutions.stable() {
 
 ### C++ Usage
 
-After installing the vcpkg package or a release archive, consume the installed
-CMake package and headers directly. The package exports the raw C ABI in
-`vvcm_rs.h` and the C++17 RAII wrapper in `vvcm_rs.hpp`.
+After installing the vcpkg package or a release archive, consume the installed CMake package and headers directly. The package exports the raw C ABI in `vvcm_rs.h` and the C++17 RAII wrapper in `vvcm_rs.hpp`.
 
 ```cmake
 find_package(vvcm-rs CONFIG REQUIRED)
@@ -189,9 +176,7 @@ int main() {
 
 ### Python Usage
 
-After installing `vvcm-rs` from PyPI, import it as `vvcm_rs`. Coordinate
-collections accept `Point2` values, ordinary `list`/`tuple` rows, or
-sequence-like two-column arrays such as NumPy `N x 2` arrays.
+After installing `vvcm-rs` from PyPI, import it as `vvcm_rs`. Coordinate collections accept `Point2` values, ordinary `list`/`tuple` rows, or sequence-like two-column arrays such as NumPy `N x 2` arrays.
 
 ```python
 from vvcm_rs import VvcmFk
@@ -216,13 +201,4 @@ for solution in solutions.stable():
     print(solution.po.as_tuple(), solution.vo.as_tuple(), solution.taut_cables)
 ```
 
-The bundled examples and regression fixtures use millimeters. If `VvcmFk` sees
-values that look very small for millimeter-scale data, such as meter-scale
-coordinates, it emits a warning to `stderr`. Convert meter inputs to millimeters
-before solving, for example by multiplying lengths by `1000.0`.
-
-## Roadmap
-
-1. Broaden numerical regression tests across additional robot/sheet
-   configurations.
-2. Expand documentation for algorithm details and expected numeric tolerances.
+The bundled examples and regression fixtures use millimeters. If `VvcmFk` sees values that look very small for millimeter-scale data, such as meter-scale coordinates, it emits a warning to `stderr`. Convert meter inputs to millimeters before solving, for example by multiplying lengths by `1000.0`.

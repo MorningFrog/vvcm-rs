@@ -62,8 +62,7 @@ cd <repository-name>
 cargo build
 ```
 
-For C++ export work and tests, install a C++17 compiler. On Windows, MSVC is
-recommended; on Linux and macOS, GCC or Clang is sufficient.
+For C++ export work and tests, install a C++17 compiler. On Windows, MSVC is recommended; on Linux and macOS, GCC or Clang is sufficient.
 
 ### 3. Install Python Binding Tools
 
@@ -167,29 +166,18 @@ cargo run --example basic_fk
 
 ## Repository Structure
 
-The repository centers on a single Rust crate with Python bindings and C/C++
-exports:
+The repository centers on a single Rust crate with Python bindings and C/C++ exports:
 
-* `src/` contains the core Rust implementation, including the FK solver,
-  simulation wrappers, FFI layer, Python bindings, math helpers, error types,
-  and public domain types.
+* `src/` contains the core Rust implementation, including the FK solver, simulation wrappers, FFI layer, Python bindings, math helpers, error types, and public domain types.
 * `include/` contains the C header and C++ wrapper for native consumers.
-* `python/` contains the published Python package, module entry point, and type
-  information shipped with the wheel.
+* `python/` contains the published Python package, module entry point, and type information shipped with the wheel.
 * `examples/` contains runnable Rust examples and timing demos.
-* `tests/` contains Rust smoke tests, the C++ export smoke test, and Python
-  binding tests.
-* `vcpkg/ports/vvcm-rs/` contains the repo-local vcpkg overlay port and its
-  packaging metadata.
-* `vcpkg/prebuilt-ports/vvcm-rs/` contains the template used to generate the
-  prebuilt x64 vcpkg overlay archive published with releases.
-* `scripts/` contains packaging helpers for native release zips and the
-  generated prebuilt vcpkg overlay archive.
-* `.github/workflows/` contains CI and release automation, including the
-  published release workflow.
-* Root metadata files such as `Cargo.toml`, `pyproject.toml`, `README.md`,
-  `CHANGELOG.md`, `TODO.md`, and `LICENSE` describe the package, docs, and
-  release history.
+* `tests/` contains Rust smoke tests, the C++ export smoke test, and Python binding tests.
+* `vcpkg/ports/vvcm-rs/` contains the repo-local vcpkg overlay port and its packaging metadata.
+* `vcpkg/prebuilt-ports/vvcm-rs/` contains the template used to generate the prebuilt x64 vcpkg overlay archive published with releases.
+* `scripts/` contains packaging helpers for native release zips and the generated prebuilt vcpkg overlay archive.
+* `.github/workflows/` contains CI and release automation, including the published release workflow.
+* Root metadata files such as `Cargo.toml`, `pyproject.toml`, `README.md`, `CHANGELOG.md`, `TODO.md`, and `LICENSE` describe the package, docs, and release history.
 
 ## Code Style
 
@@ -200,16 +188,14 @@ cargo fmt
 cargo clippy
 ```
 
-When changing Python bindings, also confirm the editable extension build
-succeeds:
+When changing Python bindings, also confirm the editable extension build succeeds:
 
 ```bash
 maturin develop
 python -m pytest tests/python
 ```
 
-When changing C/C++ export headers or FFI, also confirm the C++ smoke test
-succeeds:
+When changing C/C++ export headers or FFI, also confirm the C++ smoke test succeeds:
 
 ```bash
 cargo test --test cpp_export_smoke
@@ -276,15 +262,9 @@ docs: update deployment guide
 
 ## Release Process
 
-Releases are published only by authors or collaborators through the GitHub
-Actions workflow named "Release". Do not publish packages, create tags, or
-create GitHub releases manually from a local machine. The workflow itself is
-the release path, and it is triggered by hand when a release is ready.
+Releases are published only by authors or collaborators through the GitHub Actions workflow named "Release". Do not publish packages, create tags, or create GitHub releases manually from a local machine. The workflow itself is the release path, and it is triggered by hand when a release is ready.
 
-The release workflow validates the Rust checks, the Python sdist, the CPython
-3.10 through 3.14 wheel matrix, the source overlay, native x64 package, and
-the prebuilt vcpkg overlay artifacts, then creates the Git tag and GitHub
-release before publishing to crates.io and PyPI.
+The release workflow validates the Rust checks, the Python sdist, the CPython 3.10 through 3.14 wheel matrix, the source overlay, native x64 package, and the prebuilt vcpkg overlay artifacts, then creates the Git tag and GitHub release before publishing to crates.io and PyPI.
 
 ## Issue Guidelines
 
