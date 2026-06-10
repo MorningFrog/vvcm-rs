@@ -105,41 +105,66 @@ target_link_libraries(app PRIVATE vvcm_rs::vvcm_rs)
 
 The language-specific snippets below assume installation is already complete. Choose the section that matches your project.
 
+The sample outputs below round floating-point values to three decimals; small platform differences are normal.
+
 ### Rust Usage
 
 After adding `vvcm-rs` from crates.io, the Rust API looks like this:
 
 ```rust
-use vvcm_rs::{Point2, RobotFormation, SheetShape, VvcmFk};
+use vvcm_rs::{Point2, RobotFormation, SheetShape, VvcmError, VvcmFk};
 
-// Robot endpoints on the world-frame XY plane, using the millimeter scale of the sample data.
-let formation = RobotFormation::new(vec![
-    Point2::new(213.7, 122.7),
-    Point2::new(804.6, 37.2),
-    Point2::new(904.0, 550.0),
-    Point2::new(439.3, 715.9),
-])?;
+fn main() -> Result<(), VvcmError> {
+    // Robot endpoints on the world-frame XY plane, using the millimeter scale of the sample data.
+    let formation = RobotFormation::new(vec![
+        Point2::new(213.7, 122.7),
+        Point2::new(804.6, 37.2),
+        Point2::new(904.0, 550.0),
+        Point2::new(439.3, 715.9),
+    ])?;
 
-// Sheet vertices in the sheet-local XY frame, using the same millimeter scale.
-let sheet = SheetShape::new(vec![
-    Point2::new(-316.1, -421.9),
-    Point2::new(803.4, -384.1),
-    Point2::new(746.1, 712.8),
-    Point2::new(-367.3, 664.2),
-])?;
+    // Sheet vertices in the sheet-local XY frame, using the same millimeter scale.
+    let sheet = SheetShape::new(vec![
+        Point2::new(-316.1, -421.9),
+        Point2::new(803.4, -384.1),
+        Point2::new(746.1, 712.8),
+        Point2::new(-367.3, 664.2),
+    ])?;
 
-// Create the FK solver for four robots with a 1000 mm hold height.
-let mut fk = VvcmFk::new(4, 1000.0, sheet)?;
+    // Create the FK solver for four robots with a 1000 mm hold height.
+    let mut fk = VvcmFk::new(4, 1000.0, sheet)?;
 
-// Ask the solver to enumerate every candidate equilibrium for this formation.
-let solutions = fk.update_stable_solutions(formation)?;
+    // Ask the solver to enumerate every candidate equilibrium for this formation.
+    let solutions = fk.update_stable_solutions(formation)?;
 
-// Only stable branches are usually useful to downstream code.
-for solution in solutions.stable() {
-    println!("{:?}", solution.po);
+    // Report the total branch count and the subset that is stable.
+    println!("all solutions: {}", solutions.all_count());
+    println!("stable solutions: {}", solutions.stable_count());
+
+    // Print each stable branch with object pose, planar velocity, and taut cables.
+    for (index, solution) in solutions.stable().enumerate() {
+        println!(
+            "#{index}: Po=({:.3}, {:.3}, {:.3}), Vo=({:.3}, {:.3}), taut={:?}",
+            solution.po.x,
+            solution.po.y,
+            solution.po.z,
+            solution.vo.x,
+            solution.vo.y,
+            solution.taut_cables,
+        );
+    }
+
+    Ok(())
 }
-// Keep the snippet valid when pasted into a Result-returning main function.
-Ok::<(), vvcm_rs::VvcmError>(())
+```
+
+Expected output:
+
+```text
+all solutions: 3
+stable solutions: 2
+#0: Po=(568.841, 324.728, 336.736), Vo=(238.633, 125.028), taut=[0, 1, 2]
+#1: Po=(557.919, 341.232, 337.247), Vo=(208.794, 152.532), taut=[0, 2, 3]
 ```
 
 ### C++ Usage
@@ -154,6 +179,8 @@ target_link_libraries(app PRIVATE vvcm_rs::vvcm_rs)
 ```cpp
 #include <vvcm_rs.hpp>
 
+#include <cstddef>
+#include <iomanip>
 #include <iostream>
 #include <vector>
 
@@ -181,13 +208,39 @@ int main() {
     // Solve all candidate equilibria for the current formation.
     FkSolutions solutions = fk.update_stable_solutions(formation);
 
-    // Downstream code usually consumes only the stable branches.
-    for (const auto &solution : solutions.stable()) {
-        std::cout << solution.po.x << " "
-                  << solution.po.y << " "
-                  << solution.po.z << "\n";
+    // Report the total branch count and the subset that is stable.
+    std::cout << "all solutions: " << solutions.all_count() << "\n";
+    std::cout << "stable solutions: " << solutions.stable_count() << "\n";
+
+    // Print each stable branch with object pose, planar velocity, and taut cables.
+    std::cout << std::fixed << std::setprecision(3);
+    const std::vector<FkSolution> stable = solutions.stable();
+    for (std::size_t index = 0; index < stable.size(); ++index) {
+        const auto &solution = stable[index];
+        std::cout << "#" << index << ": Po=("
+                  << solution.po.x << ", "
+                  << solution.po.y << ", "
+                  << solution.po.z << "), Vo=("
+                  << solution.vo.x << ", "
+                  << solution.vo.y << "), taut=[";
+        for (std::size_t taut_index = 0; taut_index < solution.taut_cables.size(); ++taut_index) {
+            if (taut_index > 0) {
+                std::cout << ", ";
+            }
+            std::cout << solution.taut_cables[taut_index];
+        }
+        std::cout << "]\n";
     }
 }
+```
+
+Expected output:
+
+```text
+all solutions: 3
+stable solutions: 2
+#0: Po=(568.841, 324.728, 336.736), Vo=(238.633, 125.028), taut=[0, 1, 2]
+#1: Po=(557.919, 341.232, 337.247), Vo=(208.794, 152.532), taut=[0, 2, 3]
 ```
 
 ### Python Usage
@@ -214,12 +267,28 @@ sheet = [
 
 # Create the solver for four robots and a 1000 mm hold height.
 fk = VvcmFk(4, 1000.0, sheet)
-# Solve the stable branches for the current formation.
+# Solve all candidate equilibria for the current formation.
 solutions = fk.update_stable_solutions(formation)
 
-# Print each stable branch's object pose, planar velocity, and taut cables.
-for solution in solutions.stable():
-    print(solution.po.as_tuple(), solution.vo.as_tuple(), solution.taut_cables)
+# Report the total branch count and the subset that is stable.
+print(f"all solutions: {solutions.all_count()}")
+print(f"stable solutions: {solutions.stable_count()}")
+
+# Print each stable branch with object pose, planar velocity, and taut cables.
+for index, solution in enumerate(solutions.stable()):
+    print(
+        f"#{index}: Po=({solution.po.x:.3f}, {solution.po.y:.3f}, {solution.po.z:.3f}), "
+        f"Vo=({solution.vo.x:.3f}, {solution.vo.y:.3f}), taut={solution.taut_cables}"
+    )
+```
+
+Expected output:
+
+```text
+all solutions: 3
+stable solutions: 2
+#0: Po=(568.841, 324.728, 336.736), Vo=(238.633, 125.028), taut=[0, 1, 2]
+#1: Po=(557.919, 341.232, 337.247), Vo=(208.794, 152.532), taut=[0, 2, 3]
 ```
 
 Length units are not encoded in the API. Use one consistent unit for formation coordinates, sheet coordinates, and hold height; `VvcmFk` normalizes coordinates internally for numerical stability and maps returned object positions and virtual object points back to the original coordinate frames.
