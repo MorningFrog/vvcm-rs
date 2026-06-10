@@ -1,8 +1,8 @@
 # vvcm-rs
 
-Rust implementation of the Virtual Variable Cables Model (VVCM) forward kinematics algorithm for multi-robot transportation with a deformable sheet.
+Rust implementation for kinematics of multi-robot transporting systems with a deformable sheet using the Virtual Variable Cables Model (VVCM).
 
-`vvcm-rs` is an independent Rust crate for evaluating VVCM forward kinematics and simulation workflows. The forward kinematics core and simulation wrappers are implemented in Rust.
+`vvcm-rs` is implemented in Rust, but it is not limited to Rust projects. The same VVCM forward-kinematics and simulation library is available to **Rust**, **C++**, and **Python** users through the native Rust API, C ABI/C++17 wrapper headers, and Python bindings.
 
 If you plan to modify the codebase, read [CONTRIBUTING.md](CONTRIBUTING.md) first for workflow, structure, and release expectations.
 
