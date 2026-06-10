@@ -76,6 +76,8 @@ Install the package from PyPI:
 python -m pip install vvcm-rs
 ```
 
+Prebuilt PyPI wheels are published for CPython 3.10 through 3.14 on Windows x64, Linux x64, and macOS arm64. Python 3.9 and other platforms may fall back to building from the source distribution, which requires a local Rust toolchain and Python build tooling.
+
 ### C and C++
 
 Install the prebuilt package from the GitHub release archive:

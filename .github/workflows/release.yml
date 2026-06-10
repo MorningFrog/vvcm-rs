@@ -282,7 +282,7 @@ jobs:
           if-no-files-found: error
 
   build_python_wheels:
-    name: Build Python wheels
+    name: Build Python wheel (${{ matrix.platform.name }}, Python ${{ matrix.python-version }})
     needs: validate_release
     strategy:
       fail-fast: false
@@ -293,11 +293,21 @@ jobs:
           - "3.12"
           - "3.13"
           - "3.14"
-    runs-on: ubuntu-latest
+        platform:
+          - name: windows-x64
+            os: windows-latest
+          - name: linux-x64
+            os: ubuntu-latest
+          - name: macos-arm64
+            os: macos-14
+    runs-on: ${{ matrix.platform.os }}
     permissions:
       contents: read
     env:
       CARGO_TERM_COLOR: always
+    defaults:
+      run:
+        shell: bash
 
     steps:
       - name: Check out repository
@@ -310,12 +320,6 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Create Python virtual environment
-        run: |
-          python -m venv .venv
-          echo "VIRTUAL_ENV=$GITHUB_WORKSPACE/.venv" >> "$GITHUB_ENV"
-          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
-
       - name: Install Rust toolchain
         run: |
           rustup toolchain install stable --profile minimal
@@ -325,12 +329,26 @@ jobs:
       - name: Install Python release tools
         run: |
           python -m pip install --upgrade pip
-          python -m pip install --upgrade "maturin>=1.8,<2" twine pytest numpy
+          python -m pip install --upgrade twine pytest numpy
 
-      - name: Build Python wheel
+      - name: Build Python wheel (Linux)
+        if: runner.os == 'Linux'
+        uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          target: x86_64
+          manylinux: "2014"
+          args: --release --locked --compatibility pypi --out python-dist -i python${{ matrix.python-version }}
+
+      - name: Build Python wheel (Windows and macOS)
+        if: runner.os != 'Linux'
+        uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          args: --release --locked --compatibility pypi --out python-dist -i python
+
+      - name: Test Python wheel
         run: |
-          mkdir -p python-dist
-          maturin build --release --locked --out python-dist
           python -m twine check python-dist/*
           python -m pip install --force-reinstall python-dist/*.whl
           python -m pytest tests/python
@@ -338,7 +356,7 @@ jobs:
       - name: Upload Python wheel
         uses: actions/upload-artifact@v7
         with:
-          name: python-wheel-${{ matrix.python-version }}
+          name: python-wheel-${{ matrix.platform.name }}-${{ matrix.python-version }}
           path: python-dist/*
           if-no-files-found: error
 

@@ -266,7 +266,7 @@ Releases are published only by authors or collaborators through the GitHub Actio
 
 Before triggering a release, make sure `CHANGELOG.md` contains a section headed by the package version, such as `## 1.0.0` or `## 1.0.0 - 2026-06-10`. GitHub Release notes are generated from that section, and the workflow fails if the matching section is missing or empty.
 
-The release workflow validates the Rust checks, the Python sdist, the CPython 3.10 through 3.14 wheel matrix, the source overlay, the native package matrix for Windows x64, Linux x64, and macOS arm64, and the prebuilt vcpkg overlay artifacts, then creates the Git tag and GitHub release before publishing to crates.io and PyPI.
+The release workflow validates the Rust checks, the Python sdist, the CPython 3.10 through 3.14 Python wheel matrix for Windows x64, Linux x64, and macOS arm64, the source overlay, the native package matrix for Windows x64, Linux x64, and macOS arm64, and the prebuilt vcpkg overlay artifacts, then creates the Git tag and GitHub release before publishing to crates.io and PyPI.
 
 ## Issue Guidelines
 
