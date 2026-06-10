@@ -7,7 +7,9 @@
 //! The crate exposes small domain types such as [`Point2`],
 //! [`RobotFormation`], [`SheetShape`], and [`FkSolution`] while keeping
 //! `nalgebra` as an internal numerical backend. Length values are unitless to
-//! the type system, but the sample data and examples use millimeters.
+//! the type system and must be consistent across each solve. The FK engine
+//! normalizes coordinates internally for numerical stability and maps results
+//! back to the caller's coordinate frames.
 //!
 //! # Basic usage
 //!

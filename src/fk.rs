@@ -14,7 +14,7 @@ use nalgebra::{DMatrix, DVector};
 const RANK_EPS: Scalar = 1.0e-4;
 const STABILITY_EPS: Scalar = 1.0e-8;
 const SLACK_EPS: Scalar = 1.0e-8;
-const SMALL_INPUT_WARNING_THRESHOLD_MM: Scalar = 10.0;
+const NORMALIZED_COORDINATE_UPPER_BOUND: Scalar = 1000.0;
 
 /// Stateful forward-kinematics engine for a fixed deformable sheet.
 ///
@@ -28,7 +28,7 @@ pub struct VvcmFk {
     sheet: SheetShape,
     formation: Option<RobotFormation>,
     solutions: FkSolutions,
-    unit_warning_emitted: bool,
+    last_normalization: Option<NormalizationTransform>,
 }
 
 impl VvcmFk {
@@ -46,9 +46,9 @@ impl VvcmFk {
     ///
     /// # Units
     ///
-    /// Length units are not encoded in the type system. The bundled examples
-    /// and regression fixtures use millimeters, so inputs that look
-    /// meter-scaled emit a one-time warning to `stderr`.
+    /// Length units are not encoded in the type system. Inputs only need to use
+    /// one consistent length unit; the solver normalizes coordinates
+    /// internally and maps results back to the caller's original frame.
     pub fn new(
         robot_count: usize,
         hold_height: Scalar,
@@ -70,17 +70,14 @@ impl VvcmFk {
             });
         }
 
-        let mut fk = Self {
+        Ok(Self {
             robot_count,
             hold_height,
             sheet,
             formation: None,
             solutions: FkSolutions::default(),
-            unit_warning_emitted: false,
-        };
-        fk.warn_if_unit_scale_looks_small(None);
-
-        Ok(fk)
+            last_normalization: None,
+        })
     }
 
     /// Solves and stores the stable forward-kinematics branches for
@@ -104,18 +101,27 @@ impl VvcmFk {
         formation: RobotFormation,
     ) -> Result<&FkSolutions, VvcmError> {
         self.validate_formation(&formation)?;
-        self.warn_if_unit_scale_looks_small(Some(&formation));
 
         self.solutions = FkSolutions::default();
         self.formation = Some(formation.clone());
 
-        let mut candidates = self.find_candidate_solutions(&formation)?;
+        let normalized = NormalizedProblem::new(&formation, &self.sheet, self.hold_height);
+        self.last_normalization = Some(normalized.transform);
+
+        let mut candidates = self.find_candidate_solutions(
+            &normalized.formation,
+            &normalized.sheet,
+            normalized.hold_height,
+        )?;
         mark_stable_solutions(&mut candidates);
 
+        let transform = self
+            .last_normalization
+            .expect("normalization transform is set before solving");
         self.solutions = FkSolutions::new(
             candidates
                 .into_iter()
-                .map(|candidate| candidate.solution)
+                .map(|candidate| denormalize_solution(candidate.solution, transform))
                 .collect(),
         );
 
@@ -166,27 +172,14 @@ impl VvcmFk {
         Ok(())
     }
 
-    /// Emits a single unit-scale warning when inputs look smaller than the
-    /// millimeter-scale sample data.
-    fn warn_if_unit_scale_looks_small(&mut self, formation: Option<&RobotFormation>) {
-        if self.unit_warning_emitted {
-            return;
-        }
-
-        let Some(message) = unit_scale_warning(self.hold_height, &self.sheet, formation) else {
-            return;
-        };
-
-        eprintln!("{message}");
-        self.unit_warning_emitted = true;
-    }
-
     /// Enumerates taut cable subsets and solves every feasible candidate branch.
     fn find_candidate_solutions(
         &self,
         formation: &RobotFormation,
+        sheet: &SheetShape,
+        hold_height: Scalar,
     ) -> Result<Vec<CandidateSolution>, VvcmError> {
-        let problem = ProblemData::new(formation, &self.sheet);
+        let problem = ProblemData::new(formation, sheet);
 
         if !formation_feasible(&problem) {
             return Err(VvcmError::InfeasibleFormation);
@@ -199,7 +192,8 @@ impl VvcmFk {
 
         for taut_count in 3..=max_taut_count {
             enumerate_combinations(self.robot_count, taut_count, |taut_cables| {
-                if let Some(candidate) = self.solve_for_taut_set(&problem, taut_cables) {
+                if let Some(candidate) = self.solve_for_taut_set(&problem, hold_height, taut_cables)
+                {
                     candidates.push(candidate);
                 }
             });
@@ -216,6 +210,7 @@ impl VvcmFk {
     fn solve_for_taut_set(
         &self,
         problem: &ProblemData,
+        hold_height: Scalar,
         taut_cables: &[usize],
     ) -> Option<CandidateSolution> {
         let taut_count = taut_cables.len();
@@ -287,7 +282,7 @@ impl VvcmFk {
         let y_o = x_bar[1];
         let x_vo = x_bar[2];
         let y_vo = x_bar[3];
-        let z_o = self.hold_height - tmp.sqrt();
+        let z_o = hold_height - tmp.sqrt();
 
         let taut_polygon: Vec<Point2> = taut_cables
             .iter()
@@ -332,6 +327,170 @@ struct CandidateSolution {
     independent_taut_count: usize,
     lambda: DVector<Scalar>,
     omega: Option<DMatrix<Scalar>>,
+}
+
+/// Solver inputs after shifting to positive coordinates and uniform scaling.
+#[derive(Debug, Clone)]
+struct NormalizedProblem {
+    formation: RobotFormation,
+    sheet: SheetShape,
+    hold_height: Scalar,
+    transform: NormalizationTransform,
+}
+
+impl NormalizedProblem {
+    /// Builds normalized inputs while preserving the transform needed to map
+    /// solutions back to the caller's original coordinate frames.
+    fn new(formation: &RobotFormation, sheet: &SheetShape, hold_height: Scalar) -> Self {
+        let transform = NormalizationTransform::new(formation, sheet);
+
+        Self {
+            formation: transform.normalize_formation(formation),
+            sheet: transform.normalize_sheet(sheet),
+            hold_height: hold_height * transform.scale,
+            transform,
+        }
+    }
+}
+
+/// Affine transform used only inside one FK update.
+#[derive(Debug, Clone, Copy)]
+struct NormalizationTransform {
+    formation_origin: Point2,
+    sheet_origin: Point2,
+    scale: Scalar,
+}
+
+impl NormalizationTransform {
+    /// Chooses independent positive-coordinate origins and one shared scale.
+    fn new(formation: &RobotFormation, sheet: &SheetShape) -> Self {
+        let formation_bounds = PointBounds::from_points(formation.points());
+        let sheet_bounds = PointBounds::from_points(sheet.vertices());
+        let upper = formation_bounds.upper().max(sheet_bounds.upper());
+
+        Self {
+            formation_origin: formation_bounds.origin,
+            sheet_origin: sheet_bounds.origin,
+            scale: normalization_scale(upper),
+        }
+    }
+
+    /// Returns the formation expressed in the normalized solve frame.
+    fn normalize_formation(self, formation: &RobotFormation) -> RobotFormation {
+        RobotFormation::new(
+            formation
+                .points()
+                .iter()
+                .map(|point| self.normalize_point(*point, self.formation_origin))
+                .collect(),
+        )
+        .expect("validated formation cannot be empty")
+    }
+
+    /// Returns the sheet expressed in the normalized solve frame.
+    fn normalize_sheet(self, sheet: &SheetShape) -> SheetShape {
+        SheetShape::new(
+            sheet
+                .vertices()
+                .iter()
+                .map(|point| self.normalize_point(*point, self.sheet_origin))
+                .collect(),
+        )
+        .expect("validated sheet cannot have fewer than three vertices")
+    }
+
+    /// Shifts a point to a positive-coordinate origin and applies the shared
+    /// scale.
+    fn normalize_point(self, point: Point2, origin: Point2) -> Point2 {
+        point.relative_to(origin).scaled_by(self.scale)
+    }
+
+    /// Maps a normalized object position back to the formation frame supplied
+    /// by the caller.
+    fn denormalize_object_position(self, point: Point3) -> Point3 {
+        let inverse_scale = 1.0 / self.scale;
+
+        Point3::new(
+            point.x * inverse_scale + self.formation_origin.x,
+            point.y * inverse_scale + self.formation_origin.y,
+            point.z * inverse_scale,
+        )
+    }
+
+    /// Maps a normalized virtual object point back to the caller's sheet frame.
+    fn denormalize_virtual_object(self, point: Point2) -> Point2 {
+        let inverse_scale = 1.0 / self.scale;
+
+        Point2::new(
+            point.x * inverse_scale + self.sheet_origin.x,
+            point.y * inverse_scale + self.sheet_origin.y,
+        )
+    }
+}
+
+/// Min corner and positive coordinate span for one XY point set.
+#[derive(Debug, Clone, Copy)]
+struct PointBounds {
+    origin: Point2,
+    max_x: Scalar,
+    max_y: Scalar,
+}
+
+impl PointBounds {
+    /// Measures the bounding box that results after shifting by the min corner.
+    fn from_points(points: &[Point2]) -> Self {
+        debug_assert!(!points.is_empty());
+
+        let mut min_x = points[0].x;
+        let mut min_y = points[0].y;
+        let mut max_x = points[0].x;
+        let mut max_y = points[0].y;
+
+        for point in &points[1..] {
+            if point.x < min_x {
+                min_x = point.x;
+            }
+            if point.y < min_y {
+                min_y = point.y;
+            }
+            if point.x > max_x {
+                max_x = point.x;
+            }
+            if point.y > max_y {
+                max_y = point.y;
+            }
+        }
+
+        Self {
+            origin: Point2::new(min_x, min_y),
+            max_x: max_x - min_x,
+            max_y: max_y - min_y,
+        }
+    }
+
+    /// Returns this point set's largest shifted XY coordinate.
+    fn upper(self) -> Scalar {
+        self.max_x.max(self.max_y)
+    }
+}
+
+/// Chooses the uniform scale factor for normalized FK solves.
+fn normalization_scale(upper: Scalar) -> Scalar {
+    if upper.is_finite() && upper > 0.0 {
+        let scale = NORMALIZED_COORDINATE_UPPER_BOUND / upper;
+        if scale.is_finite() && scale > 0.0 {
+            return scale;
+        }
+    }
+
+    1.0
+}
+
+/// Maps a normalized FK candidate back to the caller's coordinate frames.
+fn denormalize_solution(mut solution: FkSolution, transform: NormalizationTransform) -> FkSolution {
+    solution.po = transform.denormalize_object_position(solution.po);
+    solution.vo = transform.denormalize_virtual_object(solution.vo);
+    solution
 }
 
 /// Precomputed coordinates and pairwise constraint rows for one FK update.
@@ -658,107 +817,89 @@ where
     recurse(n, k, 0, &mut current, &mut visit);
 }
 
-/// Builds a warning message when inputs look meter-scaled instead of
-/// millimeter-scaled.
-fn unit_scale_warning(
-    hold_height: Scalar,
-    sheet: &SheetShape,
-    formation: Option<&RobotFormation>,
-) -> Option<String> {
-    let mut small_inputs = Vec::new();
-
-    if is_too_small_for_millimeters(hold_height.abs()) {
-        small_inputs.push(format!("hold_height={hold_height}"));
-    }
-
-    let sheet_span = point_span(sheet.vertices());
-    if is_too_small_for_millimeters(sheet_span) {
-        small_inputs.push(format!("sheet_span={sheet_span}"));
-    }
-
-    if let Some(formation) = formation {
-        let formation_span = point_span(formation.points());
-        if is_too_small_for_millimeters(formation_span) {
-            small_inputs.push(format!("formation_span={formation_span}"));
-        }
-    }
-
-    if small_inputs.is_empty() {
-        return None;
-    }
-
-    Some(format!(
-        "Warning: vvcm-rs input scale looks very small ({}). This library expects length values in millimeters; if your data is in meters, multiply lengths by 1000.0 before solving.",
-        small_inputs.join(", ")
-    ))
-}
-
-/// Returns `true` when `value` is finite and below the millimeter-scale
-/// heuristic threshold.
-fn is_too_small_for_millimeters(value: Scalar) -> bool {
-    value.is_finite() && value < SMALL_INPUT_WARNING_THRESHOLD_MM
-}
-
-/// Returns the largest pairwise distance among a point set.
-fn point_span(points: &[Point2]) -> Scalar {
-    let mut max_distance: Scalar = 0.0;
-
-    for i in 0..points.len() {
-        for j in (i + 1)..points.len() {
-            max_distance = max_distance.max(points[i].distance_to(points[j]));
-        }
-    }
-
-    max_distance
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn unit_warning_is_none_for_millimeter_scale_inputs() {
-        let sheet = SheetShape::new(vec![
-            Point2::new(-316.1, -421.9),
-            Point2::new(803.4, -384.1),
-            Point2::new(746.1, 712.8),
-            Point2::new(-367.3, 664.2),
+    fn normalization_moves_inputs_to_positive_target_box() {
+        let formation = RobotFormation::new(vec![
+            Point2::new(-20.0, 40.0),
+            Point2::new(30.0, -10.0),
+            Point2::new(80.0, 90.0),
         ])
         .unwrap();
-        let formation = RobotFormation::new(vec![
-            Point2::new(213.7, 122.7),
-            Point2::new(804.6, 37.2),
-            Point2::new(904.0, 550.0),
-            Point2::new(439.3, 715.9),
+        let sheet = SheetShape::new(vec![
+            Point2::new(-300.0, -100.0),
+            Point2::new(700.0, -50.0),
+            Point2::new(100.0, 500.0),
         ])
         .unwrap();
 
-        assert!(unit_scale_warning(1000.0, &sheet, Some(&formation)).is_none());
+        let normalized = NormalizedProblem::new(&formation, &sheet, 250.0);
+
+        assert_eq!(
+            normalized.transform.formation_origin,
+            Point2::new(-20.0, -10.0)
+        );
+        assert_eq!(
+            normalized.transform.sheet_origin,
+            Point2::new(-300.0, -100.0)
+        );
+        assert_close(normalized.transform.scale, 1.0, 1.0e-6);
+        assert_close(normalized.hold_height, 250.0, 1.0e-6);
+
+        for point in normalized.formation.points() {
+            assert!(point.x >= 0.0);
+            assert!(point.y >= 0.0);
+            assert!(point.x <= NORMALIZED_COORDINATE_UPPER_BOUND);
+            assert!(point.y <= NORMALIZED_COORDINATE_UPPER_BOUND);
+        }
+        for point in normalized.sheet.vertices() {
+            assert!(point.x >= 0.0);
+            assert!(point.y >= 0.0);
+            assert!(point.x <= NORMALIZED_COORDINATE_UPPER_BOUND);
+            assert!(point.y <= NORMALIZED_COORDINATE_UPPER_BOUND);
+        }
     }
 
     #[test]
-    fn unit_warning_mentions_millimeters_for_meter_like_inputs() {
-        let sheet = SheetShape::new(vec![
-            Point2::new(-0.3161, -0.4219),
-            Point2::new(0.8034, -0.3841),
-            Point2::new(0.7461, 0.7128),
-            Point2::new(-0.3673, 0.6642),
-        ])
-        .unwrap();
+    fn normalization_scales_small_inputs_to_target_upper_bound() {
         let formation = RobotFormation::new(vec![
-            Point2::new(0.2137, 0.1227),
-            Point2::new(0.8046, 0.0372),
-            Point2::new(0.9040, 0.5500),
-            Point2::new(0.4393, 0.7159),
+            Point2::new(2.0, 1.0),
+            Point2::new(4.0, 1.5),
+            Point2::new(3.0, 2.0),
+        ])
+        .unwrap();
+        let sheet = SheetShape::new(vec![
+            Point2::new(-0.5, -0.25),
+            Point2::new(1.5, -0.25),
+            Point2::new(1.0, 0.75),
         ])
         .unwrap();
 
-        let warning = unit_scale_warning(1.0, &sheet, Some(&formation)).unwrap();
+        let normalized = NormalizedProblem::new(&formation, &sheet, 2.5);
 
-        assert!(warning.contains("millimeters"));
-        assert!(warning.contains("meters"));
-        assert!(warning.contains("hold_height"));
-        assert!(warning.contains("sheet_span"));
-        assert!(warning.contains("formation_span"));
+        assert_close(normalized.transform.scale, 500.0, 1.0e-3);
+        assert_close(normalized.hold_height, 1250.0, 1.0e-3);
+        assert_close(
+            max_coordinate(normalized.formation.points()),
+            1000.0,
+            1.0e-3,
+        );
+        assert_close(max_coordinate(normalized.sheet.vertices()), 1000.0, 1.0e-3);
+    }
+
+    fn max_coordinate(points: &[Point2]) -> Scalar {
+        points
+            .iter()
+            .fold(0.0, |max_value, point| max_value.max(point.x).max(point.y))
+    }
+
+    fn assert_close(actual: Scalar, expected: Scalar, tolerance: Scalar) {
+        assert!(
+            (actual - expected).abs() <= tolerance,
+            "actual {actual}, expected {expected}"
+        );
     }
 }

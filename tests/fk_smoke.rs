@@ -42,6 +42,73 @@ fn readme_sample_matches_expected_solutions() {
 }
 
 #[test]
+fn meter_scale_inputs_return_meter_scale_solutions() {
+    let mut millimeter_fk = VvcmFk::new(4, 1000.0, readme_sheet()).unwrap();
+    let millimeter_solutions = millimeter_fk
+        .update_stable_solutions(readme_formation())
+        .unwrap()
+        .clone();
+
+    let scale = 0.001;
+    let mut meter_fk = VvcmFk::new(4, 1000.0 * scale, scaled_sheet(readme_sheet(), scale)).unwrap();
+    let meter_solutions = meter_fk
+        .update_stable_solutions(scaled_formation(readme_formation(), scale))
+        .unwrap()
+        .clone();
+
+    assert_eq!(
+        meter_solutions.all_count(),
+        millimeter_solutions.all_count()
+    );
+    assert_eq!(
+        meter_solutions.stable_count(),
+        millimeter_solutions.stable_count()
+    );
+
+    for (meter, millimeter) in meter_solutions.iter().zip(millimeter_solutions.iter()) {
+        assert_eq!(meter.stable, millimeter.stable);
+        assert_eq!(meter.taut_cables, millimeter.taut_cables);
+        assert_point3_close(meter.po, scaled_point3(millimeter.po, scale), 1.0e-4);
+        assert_point2_close(meter.vo, scaled_point2(millimeter.vo, scale), 1.0e-4);
+    }
+}
+
+#[test]
+fn independently_translated_inputs_map_solutions_back_to_original_frames() {
+    let mut base_fk = VvcmFk::new(4, 1000.0, readme_sheet()).unwrap();
+    let base_solutions = base_fk
+        .update_stable_solutions(readme_formation())
+        .unwrap()
+        .clone();
+
+    let formation_offset = Point2::new(-5000.0, 1200.0);
+    let sheet_offset = Point2::new(700.0, -900.0);
+    let mut translated_fk =
+        VvcmFk::new(4, 1000.0, translated_sheet(readme_sheet(), sheet_offset)).unwrap();
+    let translated_solutions = translated_fk
+        .update_stable_solutions(readme_formation().translated_by(formation_offset))
+        .unwrap()
+        .clone();
+
+    assert_eq!(translated_solutions.all_count(), base_solutions.all_count());
+    assert_eq!(
+        translated_solutions.stable_count(),
+        base_solutions.stable_count()
+    );
+
+    for (translated, base) in translated_solutions.iter().zip(base_solutions.iter()) {
+        assert_eq!(translated.stable, base.stable);
+        assert_eq!(translated.taut_cables, base.taut_cables);
+        assert_point3_close(
+            translated.po,
+            base.po.translated_xy_by(formation_offset),
+            0.08,
+        );
+        assert_point2_close(translated.vo, base.vo.translated_by(sheet_offset), 0.08);
+    }
+}
+
+#[test]
 fn fk_solutions_track_stability_per_solution() {
     // FkSolutions should count stable branches independently from all branches.
     let solutions = FkSolutions::new(vec![
@@ -177,6 +244,47 @@ fn readme_sheet() -> SheetShape {
         Point2::new(-367.3, 664.2),
     ])
     .unwrap()
+}
+
+fn scaled_formation(formation: RobotFormation, scale: Scalar) -> RobotFormation {
+    RobotFormation::new(
+        formation
+            .points()
+            .iter()
+            .map(|point| scaled_point2(*point, scale))
+            .collect(),
+    )
+    .unwrap()
+}
+
+fn scaled_sheet(sheet: SheetShape, scale: Scalar) -> SheetShape {
+    SheetShape::new(
+        sheet
+            .vertices()
+            .iter()
+            .map(|point| scaled_point2(*point, scale))
+            .collect(),
+    )
+    .unwrap()
+}
+
+fn translated_sheet(sheet: SheetShape, offset: Point2) -> SheetShape {
+    SheetShape::new(
+        sheet
+            .vertices()
+            .iter()
+            .map(|point| point.translated_by(offset))
+            .collect(),
+    )
+    .unwrap()
+}
+
+fn scaled_point2(point: Point2, scale: Scalar) -> Point2 {
+    Point2::new(point.x * scale, point.y * scale)
+}
+
+fn scaled_point3(point: Point3, scale: Scalar) -> Point3 {
+    Point3::new(point.x * scale, point.y * scale, point.z * scale)
 }
 
 fn assert_point2_close(actual: Point2, expected: Point2, tolerance: Scalar) {

@@ -222,4 +222,4 @@ for solution in solutions.stable():
     print(solution.po.as_tuple(), solution.vo.as_tuple(), solution.taut_cables)
 ```
 
-The bundled examples and regression fixtures use millimeters. If `VvcmFk` sees values that look very small for millimeter-scale data, such as meter-scale coordinates, it emits a warning to `stderr`. Convert meter inputs to millimeters before solving, for example by multiplying lengths by `1000.0`.
+Length units are not encoded in the API. Use one consistent unit for formation coordinates, sheet coordinates, and hold height; `VvcmFk` normalizes coordinates internally for numerical stability and maps returned object positions and virtual object points back to the original coordinate frames.

@@ -2,6 +2,8 @@
 
 ## 1.1.0 - Unreleased
 
+- Added automatic FK coordinate normalization to improve numerical stability for small or translated inputs while returning results in the caller's original coordinate frames.
+
 ## 1.0.0 - 2026-06-10
 
 - First public release of `vvcm-rs`.
