@@ -169,14 +169,30 @@ jobs:
           import pathlib
           import re
 
+          version = os.environ["VERSION"]
           changelog = pathlib.Path("CHANGELOG.md").read_text(encoding="utf-8")
-          match = re.search(r"^## Unreleased\s*(.*?)(?=^## |\Z)", changelog, re.M | re.S)
-          notes = match.group(1).strip() if match else ""
+          heading = re.compile(
+              rf"^##\s+\[?v?{re.escape(version)}\]?(?:\s+.*)?$",
+              re.M,
+          )
+          match = heading.search(changelog)
+          if not match:
+              raise SystemExit(
+                  f"::error title=Missing changelog section::CHANGELOG.md must contain "
+                  f"a '## {version}' section for this release."
+              )
+
+          next_heading = re.search(r"^##\s+", changelog[match.end():], re.M)
+          notes_end = match.end() + next_heading.start() if next_heading else len(changelog)
+          notes = changelog[match.end():notes_end].strip()
           if not notes:
-              notes = "See CHANGELOG.md for release details."
+              raise SystemExit(
+                  f"::error title=Empty changelog section::CHANGELOG.md section "
+                  f"'## {version}' does not contain release notes."
+              )
 
           pathlib.Path("release-notes.md").write_text(
-              f"## vvcm-rs {os.environ['VERSION']}\n\n{notes}\n",
+              f"## vvcm-rs {version}\n\n{notes}\n",
               encoding="utf-8",
           )
           PY
