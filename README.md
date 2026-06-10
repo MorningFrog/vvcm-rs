@@ -223,3 +223,102 @@ for solution in solutions.stable():
 ```
 
 Length units are not encoded in the API. Use one consistent unit for formation coordinates, sheet coordinates, and hold height; `VvcmFk` normalizes coordinates internally for numerical stability and maps returned object positions and virtual object points back to the original coordinate frames.
+
+## Error Handling
+
+Forward-kinematics and simulation solves report failures through each language's normal error channel. Error messages are intended for human diagnostics; branch on Rust enum variants, Python exception classes, or C/C++ error codes when program logic needs to distinguish failure modes.
+
+The snippets below show one simple handling pattern for each language: catch the failure, print the message, and branch on the typed error when you need a specific recovery path.
+
+### Rust
+
+```rust
+match fk.update_stable_solutions(formation) {
+    Ok(solutions) => {
+        println!("stable solutions: {}", solutions.stable_count());
+    }
+    Err(vvcm_rs::VvcmError::InfeasibleFormation) => {
+        eprintln!("formation is infeasible");
+    }
+    Err(error) => {
+        eprintln!("vvcm-rs solve failed: {error}");
+    }
+}
+```
+
+The main solve errors in Rust are:
+
+- `VvcmError::DimensionMismatch` for input size mismatches during construction or solve setup.
+- `VvcmError::InfeasibleFormation` when the robot formation cannot be realized by the sheet geometry.
+- `VvcmError::NoSolution` when no candidate branch can be constructed.
+- `VvcmError::NoStableSolution` when candidate branches exist but none are stable.
+- `VvcmError` remains the common error type, so `Err(error)` still catches any of them and `Err(vvcm_rs::VvcmError::InfeasibleFormation)` can catch one case specifically.
+
+### Python
+
+```python
+from vvcm_rs import InfeasibleFormationError, VvcmError
+
+try:
+    solutions = fk.update_stable_solutions(formation)
+except InfeasibleFormationError as error:
+    print(f"formation is infeasible: {error}")
+except VvcmError as error:
+    print(f"vvcm-rs solve failed: {error}")
+else:
+    print(f"stable solutions: {solutions.stable_count()}")
+```
+
+The main solve errors in Python are:
+
+- `DimensionMismatchError` for input size mismatches during construction or solve setup.
+- `InfeasibleFormationError` when the robot formation cannot be realized by the sheet geometry.
+- `NoSolutionError` when no candidate branch can be constructed.
+- `NoStableSolutionError` when candidate branches exist but none are stable.
+- `VvcmError` remains the common base class, so `except VvcmError as error` still catches any of them and `except InfeasibleFormationError as error` can catch one case specifically.
+
+### C
+
+```c
+VvcmRsErrorCode code = vvcm_rs_fk_update_stable_solutions(
+    fk,
+    formation_points,
+    formation_point_count);
+if (code != VVCM_RS_ERROR_OK) {
+    fprintf(stderr, "vvcm-rs failed: %s\n", vvcm_rs_last_error_message());
+    if (code == VVCM_RS_ERROR_INFEASIBLE_FORMATION) {
+        fprintf(stderr, "formation is infeasible\n");
+    }
+}
+```
+
+The main solve errors in C are:
+
+- `VVCM_RS_ERROR_DIMENSION_MISMATCH` for input size mismatches during construction or solve setup.
+- `VVCM_RS_ERROR_INFEASIBLE_FORMATION` when the robot formation cannot be realized by the sheet geometry.
+- `VVCM_RS_ERROR_NO_SOLUTION` when no candidate branch can be constructed.
+- `VVCM_RS_ERROR_NO_STABLE_SOLUTION` when candidate branches exist but none are stable.
+- `vvcm_rs_last_error_message()` returns the human-readable message for the most recent failure on the current thread, while `vvcm_rs_error_message(code)` returns the generic message for a given code.
+
+### C++
+
+```cpp
+try {
+    vvcm_rs::FkSolutions solutions = fk.update_stable_solutions(formation);
+    std::cout << "stable solutions: " << solutions.stable_count() << "\n";
+} catch (const vvcm_rs::Error &error) {
+    std::cerr << "vvcm-rs failed: " << error.what()
+              << " (code " << error.code() << ")\n";
+    if (error.code() == VVCM_RS_ERROR_INFEASIBLE_FORMATION) {
+        std::cerr << "formation is infeasible\n";
+    }
+}
+```
+
+The main solve errors in C++ are:
+
+- `VVCM_RS_ERROR_DIMENSION_MISMATCH` for input size mismatches during construction or solve setup.
+- `VVCM_RS_ERROR_INFEASIBLE_FORMATION` when the robot formation cannot be realized by the sheet geometry.
+- `VVCM_RS_ERROR_NO_SOLUTION` when no candidate branch can be constructed.
+- `VVCM_RS_ERROR_NO_STABLE_SOLUTION` when candidate branches exist but none are stable.
+- `vvcm_rs::Error` keeps the originating code, so `catch (const vvcm_rs::Error &error)` still handles all failures and `error.code()` lets you branch on one case specifically.

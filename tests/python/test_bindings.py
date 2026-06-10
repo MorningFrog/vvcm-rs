@@ -4,6 +4,10 @@ import numpy as np
 import pytest
 
 from vvcm_rs import (
+    DimensionMismatchError,
+    InfeasibleFormationError,
+    NoSolutionError,
+    NoStableSolutionError,
     Point2,
     Point3,
     RobotFormation,
@@ -63,11 +67,47 @@ def test_aliases_match_cpp_style_class_names():
 
 
 def test_errors_are_mapped_to_python_exception():
-    # Dimension mismatches should raise the package-specific exception class.
+    # Dimension mismatches should raise a typed exception that still derives from VvcmError.
     fk = VvcmFk(4, 1000.0, readme_sheet_array())
 
-    with pytest.raises(VvcmError, match="dimension mismatch"):
+    with pytest.raises(DimensionMismatchError, match="dimension mismatch") as caught:
         fk.update_stable_solutions([(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)])
+    assert isinstance(caught.value, VvcmError)
+
+
+def test_infeasible_formation_maps_to_python_exception_subclass():
+    # A stretched formation outside the sheet should be identifiable without parsing the message.
+    fk = VvcmFk(
+        4,
+        10.0,
+        [
+            (0.0, 0.0),
+            (1.0, 0.0),
+            (1.0, 1.0),
+            (0.0, 1.0),
+        ],
+    )
+
+    with pytest.raises(
+        InfeasibleFormationError, match="robot formation is infeasible"
+    ) as caught:
+        fk.update_stable_solutions(
+            [
+                (0.0, 0.0),
+                (2.0, 0.0),
+                (2.0, 2.0),
+                (0.0, 2.0),
+            ]
+        )
+    assert isinstance(caught.value, VvcmError)
+
+
+def test_all_typed_error_classes_derive_from_vvcm_error():
+    # Keep the published exception hierarchy explicit for downstream handlers.
+    assert issubclass(DimensionMismatchError, VvcmError)
+    assert issubclass(InfeasibleFormationError, VvcmError)
+    assert issubclass(NoSolutionError, VvcmError)
+    assert issubclass(NoStableSolutionError, VvcmError)
 
 
 def test_manual_simulation_returns_expected_branch():

@@ -15,6 +15,22 @@ class VvcmError(Exception):
     """Exception raised when a VVCM operation cannot produce a valid result."""
 
 
+class DimensionMismatchError(VvcmError):
+    """Exception raised when an input collection has the wrong number of elements."""
+
+
+class InfeasibleFormationError(VvcmError):
+    """Exception raised when the robot formation cannot be realized by the sheet geometry."""
+
+
+class NoSolutionError(VvcmError):
+    """Exception raised when no candidate forward-kinematics solution can be constructed."""
+
+
+class NoStableSolutionError(VvcmError):
+    """Exception raised when candidate solutions exist but none pass the stability test."""
+
+
 class Point2:
     """Two-dimensional point or vector in the XY plane."""
 

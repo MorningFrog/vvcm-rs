@@ -16,7 +16,17 @@ namespace vvcm_rs
     class Error : public std::runtime_error
     {
     public:
-        explicit Error(const std::string &message) : std::runtime_error(message) {}
+        explicit Error(const std::string &message) : std::runtime_error(message), code_(VVCM_RS_ERROR_INVALID_ARGUMENT) {}
+
+        Error(VvcmRsErrorCode code, const std::string &message) : std::runtime_error(message), code_(code) {}
+
+        VvcmRsErrorCode code() const noexcept
+        {
+            return code_;
+        }
+
+    private:
+        VvcmRsErrorCode code_;
     };
 
     inline void throw_on_error(VvcmRsErrorCode code)
@@ -32,7 +42,7 @@ namespace vvcm_rs
             message = vvcm_rs_error_message(code);
         }
 
-        throw Error(message == nullptr ? "vvcm-rs error" : message);
+        throw Error(code, message == nullptr ? "vvcm-rs error" : message);
     }
 
     inline std::string version()
@@ -204,7 +214,7 @@ namespace vvcm_rs
 
             if (!found)
             {
-                throw Error("no stable VVCM solution found");
+                throw Error(VVCM_RS_ERROR_NO_STABLE_SOLUTION, "no stable VVCM solution found");
             }
 
             return std::make_pair(best_index, best_solution);
@@ -324,7 +334,7 @@ namespace vvcm_rs
             {
                 if (raw.taut_cables == nullptr)
                 {
-                    throw Error("malformed taut cable list returned by vvcm-rs");
+                    throw Error(VVCM_RS_ERROR_INVALID_ARGUMENT, "malformed taut cable list returned by vvcm-rs");
                 }
 
                 solution.taut_cables.assign(raw.taut_cables, raw.taut_cables + raw.taut_cable_count);
@@ -441,7 +451,7 @@ namespace vvcm_rs
             throw_on_error(vvcm_rs_simulation_solution_index(handle_, &has_value, &index));
             if (has_value == 0)
             {
-                throw Error("simulation has no selected solution");
+                throw Error(VVCM_RS_ERROR_INVALID_ARGUMENT, "simulation has no selected solution");
             }
             return index;
         }
@@ -636,7 +646,7 @@ namespace vvcm_rs
             throw_on_error(vvcm_rs_manual_simulation_object_position(handle_, &has_value, &point));
             if (has_value == 0)
             {
-                throw Error("manual simulation is not initialized");
+                throw Error(VVCM_RS_ERROR_INVALID_ARGUMENT, "manual simulation is not initialized");
             }
             return Point3(point.x, point.y, point.z);
         }
@@ -662,7 +672,7 @@ namespace vvcm_rs
                 &point));
             if (has_value == 0)
             {
-                throw Error("manual simulation is not initialized");
+                throw Error(VVCM_RS_ERROR_INVALID_ARGUMENT, "manual simulation is not initialized");
             }
             return Point3(point.x, point.y, point.z);
         }
@@ -682,7 +692,7 @@ namespace vvcm_rs
             throw_on_error(vvcm_rs_manual_simulation_solution_index(handle_, &has_value, &index));
             if (has_value == 0)
             {
-                throw Error("manual simulation has no selected solution");
+                throw Error(VVCM_RS_ERROR_INVALID_ARGUMENT, "manual simulation has no selected solution");
             }
             return index;
         }

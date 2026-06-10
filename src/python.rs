@@ -11,6 +11,10 @@ use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyModule};
 
 pyo3::create_exception!(vvcm_rs, VvcmError, pyo3::exceptions::PyException);
+pyo3::create_exception!(vvcm_rs, DimensionMismatchError, VvcmError);
+pyo3::create_exception!(vvcm_rs, InfeasibleFormationError, VvcmError);
+pyo3::create_exception!(vvcm_rs, NoSolutionError, VvcmError);
+pyo3::create_exception!(vvcm_rs, NoStableSolutionError, VvcmError);
 
 #[pyclass(name = "Point2", module = "vvcm_rs", skip_from_py_object)]
 #[derive(Debug, Clone)]
@@ -832,6 +836,19 @@ impl PyVvcmManualSimulation {
 fn _vvcm_rs(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     m.add("VvcmError", py.get_type::<VvcmError>())?;
+    m.add(
+        "DimensionMismatchError",
+        py.get_type::<DimensionMismatchError>(),
+    )?;
+    m.add(
+        "InfeasibleFormationError",
+        py.get_type::<InfeasibleFormationError>(),
+    )?;
+    m.add("NoSolutionError", py.get_type::<NoSolutionError>())?;
+    m.add(
+        "NoStableSolutionError",
+        py.get_type::<NoStableSolutionError>(),
+    )?;
     m.add_class::<PyPoint2>()?;
     m.add_class::<PyPoint3>()?;
     m.add_class::<PyRobotFormation>()?;
@@ -845,7 +862,13 @@ fn _vvcm_rs(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
 }
 
 fn map_vvcm_error(error: CoreVvcmError) -> PyErr {
-    VvcmError::new_err(error.to_string())
+    let message = error.to_string();
+    match error {
+        CoreVvcmError::DimensionMismatch { .. } => DimensionMismatchError::new_err(message),
+        CoreVvcmError::InfeasibleFormation => InfeasibleFormationError::new_err(message),
+        CoreVvcmError::NoSolution => NoSolutionError::new_err(message),
+        CoreVvcmError::NoStableSolution => NoStableSolutionError::new_err(message),
+    }
 }
 
 fn point2_from_py(value: &Bound<'_, PyAny>) -> PyResult<Point2> {

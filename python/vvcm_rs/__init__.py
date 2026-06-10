@@ -2,8 +2,12 @@
 
 from ._vvcm_rs import (
     __version__,
+    DimensionMismatchError,
     FkSolution,
     FkSolutions,
+    InfeasibleFormationError,
+    NoSolutionError,
+    NoStableSolutionError,
     Point2,
     Point3,
     RobotFormation,
@@ -27,6 +31,10 @@ __all__ = [
     "FkSolution",
     "FkSolutions",
     "VvcmError",
+    "DimensionMismatchError",
+    "InfeasibleFormationError",
+    "NoSolutionError",
+    "NoStableSolutionError",
     "VvcmFk",
     "VvcmSimulation",
     "VvcmManualSimulation",

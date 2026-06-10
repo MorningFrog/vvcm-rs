@@ -81,6 +81,39 @@ int main()
     require_point2(stable[1].vo, Point2(208.79898f, 152.53357f), 0.05f, "second stable Vo mismatch");
     require(stable[1].taut_cables.size() == 3 && stable[1].taut_cables[0] == 0 && stable[1].taut_cables[1] == 2 && stable[1].taut_cables[2] == 3, "second stable taut cable set mismatch");
 
+    // Wrapper-only no-stable errors should also expose a stable error code.
+    try
+    {
+        FkSolutions().closest_stable_to(Point3::zero());
+        require(false, "empty solution collection should throw");
+    }
+    catch (const Error &error)
+    {
+        require(error.code() == VVCM_RS_ERROR_NO_STABLE_SOLUTION, "unexpected no-stable error code");
+    }
+
+    // A stretched formation outside the sheet should preserve the C ABI error code through the C++ wrapper.
+    VvcmFk infeasible_fk(4, 10.0f, {
+        Point2(0.0f, 0.0f),
+        Point2(1.0f, 0.0f),
+        Point2(1.0f, 1.0f),
+        Point2(0.0f, 1.0f),
+    });
+    try
+    {
+        infeasible_fk.update_stable_solutions({
+            Point2(0.0f, 0.0f),
+            Point2(2.0f, 0.0f),
+            Point2(2.0f, 2.0f),
+            Point2(0.0f, 2.0f),
+        });
+        require(false, "infeasible formation should throw");
+    }
+    catch (const Error &error)
+    {
+        require(error.code() == VVCM_RS_ERROR_INFEASIBLE_FORMATION, "unexpected infeasible error code");
+    }
+
     // Exercise the velocity-driven simulation wrapper with the shared six-robot fixture.
     VvcmSimulation simulation(6, 823.0f, {
         Point2(-131.665741f, -376.508026f),
