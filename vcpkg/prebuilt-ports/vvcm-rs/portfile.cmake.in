@@ -23,7 +23,7 @@ endif()
 
 set(VVCM_RS_ASSET_NAME "vvcm-rs-${VERSION}-${VVCM_RS_ASSET_TRIPLET}.zip")
 vcpkg_download_distfile(VVCM_RS_ARCHIVE
-    URLS "https://github.com/morningfrog/vvcm-rs/releases/download/@VVCM_RS_RELEASE_TAG@/${VVCM_RS_ASSET_NAME}"
+    URLS "https://github.com/MorningFrog/vvcm-rs/releases/download/@VVCM_RS_RELEASE_TAG@/${VVCM_RS_ASSET_NAME}"
     FILENAME "${VVCM_RS_ASSET_NAME}"
     SHA512 "${VVCM_RS_SHA512}"
 )

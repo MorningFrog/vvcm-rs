@@ -27,8 +27,8 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/morningfrog/vvcm-rs"
-Repository = "https://github.com/morningfrog/vvcm-rs"
+Homepage = "https://github.com/MorningFrog/vvcm-rs"
+Repository = "https://github.com/MorningFrog/vvcm-rs"
 
 [tool.maturin]
 bindings = "pyo3"

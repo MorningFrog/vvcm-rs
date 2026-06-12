@@ -32,10 +32,10 @@
   ],
   "author": "MorningFrog <1098224028@qq.com>",
   "license": "Apache-2.0",
-  "homepage": "https://github.com/morningfrog/vvcm-rs",
+  "homepage": "https://github.com/MorningFrog/vvcm-rs",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/morningfrog/vvcm-rs.git",
+    "url": "git+https://github.com/MorningFrog/vvcm-rs.git",
     "directory": "wasm"
   },
   "publishConfig": {

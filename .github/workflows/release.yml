@@ -442,7 +442,7 @@ jobs:
           portfile = pathlib.Path(os.environ["PORTFILE"])
           version = os.environ["VERSION"]
           port = os.environ["PORT"]
-          expected = f"https://github.com/morningfrog/vvcm-rs/releases/download/v{version}/"
+          expected = f"https://github.com/MorningFrog/vvcm-rs/releases/download/v{version}/"
           replacement = f"http://127.0.0.1:{port}/"
           text = portfile.read_text(encoding="utf-8")
           if expected not in text:
