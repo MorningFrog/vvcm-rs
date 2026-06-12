@@ -91,40 +91,11 @@ jobs:
       - name: Read release version
         id: version
         run: |
-          python - <<'PY' >> "$GITHUB_OUTPUT"
-          import json
-          import pathlib
-          import tomllib
-
-          cargo = tomllib.loads(pathlib.Path("Cargo.toml").read_text(encoding="utf-8"))
-          pyproject = tomllib.loads(pathlib.Path("pyproject.toml").read_text(encoding="utf-8"))
-          npm_package = json.loads(pathlib.Path("wasm/package.json").read_text(encoding="utf-8"))
-          vcpkg = json.loads(
-              pathlib.Path("vcpkg/ports/vvcm-rs/vcpkg.json").read_text(encoding="utf-8")
-          )
-          prebuilt_vcpkg = json.loads(
-              pathlib.Path("vcpkg/prebuilt-ports/vvcm-rs/vcpkg.json").read_text(encoding="utf-8")
-          )
-
-          version = cargo["package"]["version"]
-          versions = {
-              "Cargo.toml": version,
-              "pyproject.toml": pyproject["project"]["version"],
-              "wasm/package.json": npm_package["version"],
-              "vcpkg/ports/vvcm-rs/vcpkg.json": vcpkg["version-semver"],
-              "vcpkg/prebuilt-ports/vvcm-rs/vcpkg.json": prebuilt_vcpkg["version-semver"],
-          }
-          mismatches = [
-              f"{path}={value}"
-              for path, value in versions.items()
-              if value != version
-          ]
-          if mismatches:
-              raise SystemExit("package versions do not match: " + ", ".join(mismatches))
-
-          print(f"version={version}")
-          print(f"tag=v{version}")
-          PY
+          version="$(python scripts/sync_versions.py --check --print-version)"
+          {
+            echo "version=${version}"
+            echo "tag=v${version}"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Verify tag is unused
         run: |

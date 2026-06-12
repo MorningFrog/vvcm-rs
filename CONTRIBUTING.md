@@ -307,11 +307,13 @@ Releases are published only by authors or collaborators through the GitHub Actio
 
 Before triggering a release, make sure `CHANGELOG.md` contains a section headed by the package version, such as `## 1.0.0` or `## 1.0.0 - 2026-06-10`. GitHub Release notes are generated from that section, and the workflow fails if the matching section is missing or empty.
 
+When bumping a release version, run `python scripts/sync_versions.py <version>` from the repository root to update `Cargo.toml`, `Cargo.lock`, `pyproject.toml`, `wasm/package.json`, `vcpkg/ports/vvcm-rs/vcpkg.json`, and `vcpkg/prebuilt-ports/vvcm-rs/vcpkg.json` together. Use `python scripts/sync_versions.py --check` to verify that all package version files are synchronized without writing changes.
+
 Before triggering a release, make sure the repository has configured `CARGO_REGISTRY_TOKEN` for crates.io. npm uses GitHub Actions trusted publishing, so configure a trusted publisher for both `@morningfrog/vvcm-rs` and `vvcm-rs` on npmjs.com before running the workflow. PyPI publishing uses the configured GitHub trusted publisher identity.
 
 The release workflow validates the Rust checks, the WebAssembly npm package, the TypeScript declaration smoke test, the Python sdist, the CPython 3.10 through 3.14 Python wheel matrix for Windows x64, Linux x64, and macOS arm64, the source overlay, the native package matrix for Windows x64, Linux x64, and macOS arm64, and the prebuilt vcpkg overlay artifacts, then creates the Git tag and GitHub release before publishing to crates.io, npm through trusted publishing, and PyPI.
 
-The npm release publishes both `@morningfrog/vvcm-rs` and `vvcm-rs` from the same WebAssembly artifact through GitHub Actions trusted publishing. Keep `Cargo.toml`, `pyproject.toml`, `wasm/package.json`, `vcpkg/ports/vvcm-rs/vcpkg.json`, and `vcpkg/prebuilt-ports/vvcm-rs/vcpkg.json` on the same version before running the workflow.
+The npm release publishes both `@morningfrog/vvcm-rs` and `vvcm-rs` from the same WebAssembly artifact through GitHub Actions trusted publishing. The release workflow runs `python scripts/sync_versions.py --check` before publishing, so keep the version files synchronized before running the workflow.
 
 ## Issue Guidelines
 
