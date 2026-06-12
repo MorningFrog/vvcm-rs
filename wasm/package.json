@@ -1,0 +1,47 @@
+{
+  "name": "@morningfrog/vvcm-rs",
+  "version": "1.2.0",
+  "description": "WebAssembly bindings for the vvcm-rs VVCM forward-kinematics and simulation library.",
+  "type": "module",
+  "main": "./index.js",
+  "module": "./index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.js",
+      "default": "./index.js"
+    }
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "README.md",
+    "pkg/"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "keywords": [
+    "kinematics",
+    "robotics",
+    "vvcm",
+    "deformable-sheet",
+    "wasm",
+    "webassembly"
+  ],
+  "author": "MorningFrog <1098224028@qq.com>",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/morningfrog/vvcm-rs",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/morningfrog/vvcm-rs.git",
+    "directory": "wasm"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "typescript": "6.0.3"
+  }
+}

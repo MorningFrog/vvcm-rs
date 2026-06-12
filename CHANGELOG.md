@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.0 - 2026-06-12
+
+- Added WebAssembly bindings for frontend usage with `wasm-bindgen`, covering forward kinematics, velocity-driven simulation, and manual simulation wrappers.
+- Added npm packaging for both `@morningfrog/vvcm-rs` and `vvcm-rs`, including hand-written TypeScript declarations.
+
 ## 1.1.0 - 2026-06-11
 
 - Added automatic FK coordinate normalization to improve numerical stability for small or translated inputs while returning results in the caller's original coordinate frames.

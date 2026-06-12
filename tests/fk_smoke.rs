@@ -137,7 +137,7 @@ fn fk_solutions_track_stability_per_solution() {
 #[test]
 #[allow(clippy::excessive_precision)]
 fn six_robot_local_sample_matches_expected_solution() {
-    // Start from robot endpoints in the world-frame XY plane, then shift them to a local origin.
+    // Start from robot node positions on the world-coordinate XY plane, then shift them to a local origin.
     let absolute_formation = RobotFormation::new(vec![
         Point2::new(-27.419184, -176.293854),
         Point2::new(398.141083, -35.190411),
@@ -149,7 +149,7 @@ fn six_robot_local_sample_matches_expected_solution() {
     .unwrap();
     let origin = absolute_formation.points()[0];
     let local_formation = absolute_formation.relative_to(origin);
-    // Use the matching six-robot sheet fixture in the sheet-local XY frame.
+    // Use the matching six-robot unfolded-sheet fixture in the sheet's local coordinate frame.
     let sheet = SheetShape::new(vec![
         Point2::new(-131.665741, -376.508026),
         Point2::new(480.675873, -388.066681),
@@ -225,7 +225,7 @@ fn formation_dimension_mismatch_is_reported() {
 }
 
 fn readme_formation() -> RobotFormation {
-    // Keep this fixture identical to the README usage snippet; the robot endpoints live on the world-frame XY plane.
+    // Keep this fixture identical to the README usage snippet; each point is a robot node position on the world-coordinate XY plane.
     RobotFormation::new(vec![
         Point2::new(213.7, 122.7),
         Point2::new(804.6, 37.2),
@@ -236,7 +236,7 @@ fn readme_formation() -> RobotFormation {
 }
 
 fn readme_sheet() -> SheetShape {
-    // Keep this fixture identical to the README usage snippet; the sheet vertices live in the sheet-local XY frame.
+    // Keep this fixture identical to the README usage snippet; each point is a vertex in the sheet's local coordinate frame.
     SheetShape::new(vec![
         Point2::new(-316.1, -421.9),
         Point2::new(803.4, -384.1),

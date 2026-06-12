@@ -1,7 +1,7 @@
 use vvcm_rs::{Point2, RobotFormation, SheetShape, VvcmFk};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Robot endpoints on the world-frame XY plane, using the millimeter scale of the sample data.
+    // Robot formation: each Point2 is a robot node position on the world-coordinate XY plane, in millimeters.
     let formation = RobotFormation::new(vec![
         Point2::new(213.7, 122.7),
         Point2::new(804.6, 37.2),
@@ -9,7 +9,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Point2::new(439.3, 715.9),
     ])?;
 
-    // Sheet vertices in the sheet-local XY frame, using the same millimeter scale.
+    // Unfolded sheet: each Point2 is a vertex in the sheet's local coordinate frame, in millimeters.
     let sheet = SheetShape::new(vec![
         Point2::new(-316.1, -421.9),
         Point2::new(803.4, -384.1),

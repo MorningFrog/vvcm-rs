@@ -36,6 +36,12 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22.14.0"
+          package-manager-cache: false
+
       - name: Create Python virtual environment
         run: |
           python -m venv .venv
@@ -46,6 +52,7 @@ jobs:
         run: |
           rustup toolchain install stable --profile minimal
           rustup component add clippy rustfmt --toolchain stable
+          rustup target add wasm32-unknown-unknown --toolchain stable
           rustup default stable
           rustup show
 
@@ -53,6 +60,11 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install --upgrade "maturin>=1.8,<2" twine pytest numpy
+
+      - name: Install WebAssembly release tools
+        run: |
+          cargo install wasm-pack --version 0.15.0 --locked
+          npm install --prefix wasm --ignore-scripts --no-package-lock
 
       - name: Check crates.io secret
         env:
@@ -86,6 +98,7 @@ jobs:
 
           cargo = tomllib.loads(pathlib.Path("Cargo.toml").read_text(encoding="utf-8"))
           pyproject = tomllib.loads(pathlib.Path("pyproject.toml").read_text(encoding="utf-8"))
+          npm_package = json.loads(pathlib.Path("wasm/package.json").read_text(encoding="utf-8"))
           vcpkg = json.loads(
               pathlib.Path("vcpkg/ports/vvcm-rs/vcpkg.json").read_text(encoding="utf-8")
           )
@@ -97,6 +110,7 @@ jobs:
           versions = {
               "Cargo.toml": version,
               "pyproject.toml": pyproject["project"]["version"],
+              "wasm/package.json": npm_package["version"],
               "vcpkg/ports/vvcm-rs/vcpkg.json": vcpkg["version-semver"],
               "vcpkg/prebuilt-ports/vvcm-rs/vcpkg.json": prebuilt_vcpkg["version-semver"],
           }
@@ -130,6 +144,21 @@ jobs:
           cargo clippy --all-targets -- -D warnings
           cargo test
           cargo publish --dry-run --locked
+
+      - name: Build and test WASM package
+        run: |
+          set -euo pipefail
+          cargo check --lib --target wasm32-unknown-unknown --features wasm
+          wasm-pack test --node --features wasm
+          rm -rf wasm/pkg npm-dist npm-tarballs
+          wasm-pack build --target bundler --release --no-opt --out-dir wasm/pkg --out-name vvcm_rs . --features wasm
+          npm --prefix wasm run typecheck
+          python scripts/package_wasm_npm.py
+          mkdir -p npm-tarballs
+          npm pack ./npm-dist/morningfrog-vvcm-rs --pack-destination npm-tarballs --dry-run
+          npm pack ./npm-dist/vvcm-rs --pack-destination npm-tarballs --dry-run
+          npm pack ./npm-dist/morningfrog-vvcm-rs --pack-destination npm-tarballs
+          npm pack ./npm-dist/vvcm-rs --pack-destination npm-tarballs
 
       - name: Build and test Python bindings
         run: |
@@ -218,6 +247,13 @@ jobs:
         with:
           name: release-dist
           path: release-dist/*
+          if-no-files-found: error
+
+      - name: Upload npm packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: npm-dist
+          path: npm-tarballs/*.tgz
           if-no-files-found: error
 
       - name: Upload release notes
@@ -521,9 +557,9 @@ jobs:
 
       - name: Finish dry run
         run: |
-          echo "Dry run completed. No git tag, GitHub release, crates.io publish, or PyPI upload was created."
+          echo "Dry run completed. No git tag, GitHub release, crates.io publish, PyPI upload, or npm publish was created."
           echo "## Dry run completed" >> "$GITHUB_STEP_SUMMARY"
-          echo "No git tag, GitHub release, crates.io publish, or PyPI upload was created." >> "$GITHUB_STEP_SUMMARY"
+          echo "No git tag, GitHub release, crates.io publish, PyPI upload, or npm publish was created." >> "$GITHUB_STEP_SUMMARY"
 
   publish:
     name: Publish release
@@ -553,6 +589,16 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22.14.0"
+          registry-url: "https://registry.npmjs.org"
+          package-manager-cache: false
+
+      - name: Upgrade npm for trusted publishing
+        run: npm install -g npm@11.5.1
+
       - name: Install Rust toolchain
         run: |
           rustup toolchain install stable --profile minimal
@@ -576,6 +622,12 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: release-dist
+          path: release-dist
+
+      - name: Download npm packages for release assets
+        uses: actions/download-artifact@v8
+        with:
+          name: npm-dist
           path: release-dist
 
       - name: Download Python wheels for release assets
@@ -631,3 +683,11 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: python-dist
+
+      - name: Publish npm packages
+        env:
+          VERSION: ${{ needs.validate_release.outputs.version }}
+        run: |
+          set -euo pipefail
+          npm publish "./release-dist/morningfrog-vvcm-rs-${VERSION}.tgz" --access public
+          npm publish "./release-dist/vvcm-rs-${VERSION}.tgz" --access public

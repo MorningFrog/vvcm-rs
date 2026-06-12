@@ -39,6 +39,7 @@
 
 pub mod error;
 #[doc(hidden)]
+#[cfg(not(all(feature = "wasm", target_arch = "wasm32")))]
 #[allow(unsafe_code)]
 pub mod ffi;
 pub mod fk;
@@ -49,6 +50,8 @@ pub mod types;
 mod math;
 #[cfg(feature = "python-extension")]
 mod python;
+#[cfg(all(feature = "wasm", target_arch = "wasm32"))]
+pub mod wasm;
 
 pub use error::VvcmError;
 pub use fk::VvcmFk;

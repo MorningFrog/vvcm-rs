@@ -8,7 +8,13 @@
 /release-notes
 /release-notes.md
 /native-dist
+/npm-dist
+/npm-tarballs
 /prebuilt-vcpkg-dist
+/wasm/pkg
+/wasm/node_modules
+/wasm/package-lock.json
+/wasm/*.tgz
 /*.egg-info
 __pycache__/
 *.pyc

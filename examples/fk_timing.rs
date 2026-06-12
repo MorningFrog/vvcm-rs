@@ -5,7 +5,7 @@ use std::time::Instant;
 use vvcm_rs::{Point2, RobotFormation, SheetShape, VvcmFk};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Use a larger 20-robot ring on the world-frame XY plane to measure solve time on a heavier problem.
+    // Robot formation: these 20 Point2 values are robot node positions on the world-coordinate XY plane, in millimeters.
     let formation = RobotFormation::new(vec![
         Point2::new(576.276881720430, 162.627551020408),
         Point2::new(636.088709677419, 181.760204081633),
@@ -29,7 +29,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Point2::new(542.674731182796, 188.137755102041),
     ])?;
 
-    // The matching sheet contour in the sheet-local XY frame for the same timing scenario.
+    // Unfolded sheet: each Point2 is a vertex in the sheet's local coordinate frame, in millimeters.
     let sheet = SheetShape::new(vec![
         Point2::new(512.432795698925, 55.4846938775513),
         Point2::new(621.975806451613, 59.3112244897961),

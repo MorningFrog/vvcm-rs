@@ -1,6 +1,6 @@
 [package]
 name = "vvcm-rs"
-version = "1.1.0"
+version = "1.2.0"
 edition = "2024"
 description = "Kinematics of multi-robot transporting systems with a deformable sheet using VVCM."
 authors = ["MorningFrog <1098224028@qq.com>"]
@@ -19,11 +19,21 @@ crate-type = ["rlib", "cdylib", "staticlib"]
 [features]
 default = []
 python-extension = ["dep:pyo3", "pyo3/extension-module"]
+wasm = ["dep:js-sys", "dep:serde", "dep:serde-wasm-bindgen", "dep:wasm-bindgen"]
 
 [dependencies]
 nalgebra = "0.35.0"
 pyo3 = { version = "0.28.3", optional = true }
 thiserror = "2.0.18"
 
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = { version = "0.3.100", optional = true }
+serde = { version = "1.0.228", features = ["derive"], optional = true }
+serde-wasm-bindgen = { version = "0.6.5", optional = true }
+wasm-bindgen = { version = "0.2.123", optional = true }
+
 [dev-dependencies]
 cc = "1.2.63"
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test = "0.3.73"

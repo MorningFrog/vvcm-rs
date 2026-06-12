@@ -178,7 +178,7 @@ def test_velocity_simulation_steps_consistently():
 
 
 def readme_formation_array():
-    # Keep this fixture identical to the README usage snippet; the robot endpoints live on the world-frame XY plane.
+    # Keep this fixture identical to the README usage snippet; each row is a robot node position on the world-coordinate XY plane.
     return np.array(
         [
             [213.7, 122.7],
@@ -191,7 +191,7 @@ def readme_formation_array():
 
 
 def readme_sheet_array():
-    # Keep this fixture identical to the README usage snippet; the sheet vertices live in the sheet-local XY frame.
+    # Keep this fixture identical to the README usage snippet; each row is a vertex in the sheet's local coordinate frame.
     return np.array(
         [
             [-316.1, -421.9],
@@ -204,7 +204,7 @@ def readme_sheet_array():
 
 
 def six_robot_formation():
-    # Shared six-robot fixture for robot endpoints on the world-frame XY plane.
+    # Shared six-robot fixture: each row is a robot node position on the world-coordinate XY plane.
     return [
         (-27.419184, -176.293854),
         (398.141083, -35.190411),
@@ -216,7 +216,7 @@ def six_robot_formation():
 
 
 def six_robot_sheet():
-    # Matching sheet-local XY fixture for the shared six-robot simulation case.
+    # Matching unfolded-sheet fixture: each row is a vertex in the sheet's local coordinate frame.
     return [
         (-131.665741, -376.508026),
         (480.675873, -388.066681),

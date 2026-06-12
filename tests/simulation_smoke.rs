@@ -6,7 +6,7 @@ use vvcm_rs::{
 
 #[test]
 fn manual_simulation_returns_expected_branch() {
-    // Manual simulation starts from a sheet-local shape and waits for an explicit formation.
+    // Manual simulation starts from an unfolded sheet shape and waits for an explicit formation.
     let mut simulation = VvcmManualSimulation::new(6, 823.0, six_robot_sheet()).unwrap();
 
     // Initialize at the world origin to select the first stable branch.
@@ -105,7 +105,7 @@ fn velocity_simulation_initializes_and_steps_consistently() {
 }
 
 fn six_robot_formation() -> RobotFormation {
-    // Shared six-robot fixture for robot endpoints on the world-frame XY plane.
+    // Shared six-robot fixture: each point is a robot node position on the world-coordinate XY plane.
     RobotFormation::new(vec![
         Point2::new(-27.419184, -176.293854),
         Point2::new(398.141083, -35.190411),
@@ -118,7 +118,7 @@ fn six_robot_formation() -> RobotFormation {
 }
 
 fn six_robot_sheet() -> SheetShape {
-    // Matching sheet-local XY fixture for the shared six-robot simulation case.
+    // Matching unfolded-sheet fixture: each point is a vertex in the sheet's local coordinate frame.
     SheetShape::new(vec![
         Point2::new(-131.665741, -376.508026),
         Point2::new(480.675873, -388.066681),

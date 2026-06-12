@@ -74,7 +74,17 @@ python -m venv .venv
 python -m pip install --upgrade pip maturin pytest numpy
 ```
 
-### 4. Install Packages From Source
+### 4. Install WebAssembly and npm Tools
+
+Use these tools for JavaScript/TypeScript package development and release validation:
+
+```bash
+rustup target add wasm32-unknown-unknown
+cargo install wasm-pack --version 0.15.0 --locked
+npm install --prefix wasm --ignore-scripts --no-package-lock
+```
+
+### 5. Install Packages From Source
 
 Use these commands when you need to test local source changes before a published release exists.
 
@@ -158,7 +168,19 @@ maturin build --release --locked --out dist
 python -m pip install --force-reinstall dist/<wheel-file>.whl
 ```
 
-### 5. Start the Example
+#### JavaScript and TypeScript
+
+Build the WebAssembly npm package from the source tree with `wasm-pack`, then prepare the scoped and unscoped package directories:
+
+```bash
+wasm-pack build --target bundler --release --no-opt --out-dir wasm/pkg --out-name vvcm_rs . --features wasm
+npm --prefix wasm run typecheck
+python scripts/package_wasm_npm.py
+```
+
+The generated publish-ready package directories are placed under `npm-dist/morningfrog-vvcm-rs` and `npm-dist/vvcm-rs`. They both contain the same WebAssembly artifact and TypeScript declarations, with only the npm package name changed.
+
+### 6. Start the Example
 
 ```bash
 cargo run --example basic_fk
@@ -166,16 +188,17 @@ cargo run --example basic_fk
 
 ## Repository Structure
 
-The repository centers on a single Rust crate with Python bindings and C/C++ exports:
+The repository centers on a single Rust crate with Python, WebAssembly, and C/C++ exports:
 
-* `src/` contains the core Rust implementation, including the FK solver, simulation wrappers, FFI layer, Python bindings, math helpers, error types, and public domain types.
+* `src/` contains the core Rust implementation, including the FK solver, simulation wrappers, FFI layer, WebAssembly bindings, Python bindings, math helpers, error types, and public domain types.
 * `include/` contains the C header and C++ wrapper for native consumers.
 * `python/` contains the published Python package, module entry point, and type information shipped with the wheel.
+* `wasm/` contains the npm package entry point, TypeScript declarations, package README, and TypeScript smoke test for the WebAssembly build.
 * `examples/` contains runnable Rust examples and timing demos.
-* `tests/` contains Rust smoke tests, the C++ export smoke test, and Python binding tests.
+* `tests/` contains Rust smoke tests, the C++ export smoke test, WebAssembly binding tests, and Python binding tests.
 * `vcpkg/ports/vvcm-rs/` contains the repo-local vcpkg overlay port and its packaging metadata.
 * `vcpkg/prebuilt-ports/vvcm-rs/` contains the template used to generate the prebuilt vcpkg overlay archive published with releases.
-* `scripts/` contains packaging helpers for native release zips and the generated prebuilt vcpkg overlay archive.
+* `scripts/` contains packaging helpers for native release zips, WebAssembly npm package directories, and the generated prebuilt vcpkg overlay archive.
 * `.github/workflows/` contains CI and release automation, including the published release workflow.
 * Root metadata files such as `Cargo.toml`, `pyproject.toml`, `README.md`, `CHANGELOG.md`, `TODO.md`, and `LICENSE` describe the package, docs, and release history.
 
@@ -199,6 +222,16 @@ When changing C/C++ export headers or FFI, also confirm the C++ smoke test succe
 
 ```bash
 cargo test --test cpp_export_smoke
+```
+
+When changing WebAssembly bindings or npm package files, also confirm the wasm build, wasm runtime tests, and TypeScript declarations succeed:
+
+```bash
+cargo check --lib --target wasm32-unknown-unknown --features wasm
+wasm-pack test --node --features wasm
+wasm-pack build --target bundler --release --no-opt --out-dir wasm/pkg --out-name vvcm_rs . --features wasm
+npm --prefix wasm run typecheck
+python scripts/package_wasm_npm.py
 ```
 
 Code requirements:
@@ -230,6 +263,14 @@ C/C++ export changes should also pass:
 
 ```bash
 cargo test --test cpp_export_smoke
+```
+
+WebAssembly or TypeScript package changes should also pass:
+
+```bash
+cargo check --lib --target wasm32-unknown-unknown --features wasm
+wasm-pack test --node --features wasm
+npm --prefix wasm run typecheck
 ```
 
 When adding a feature or fixing a bug, add or update tests whenever possible.
@@ -266,7 +307,11 @@ Releases are published only by authors or collaborators through the GitHub Actio
 
 Before triggering a release, make sure `CHANGELOG.md` contains a section headed by the package version, such as `## 1.0.0` or `## 1.0.0 - 2026-06-10`. GitHub Release notes are generated from that section, and the workflow fails if the matching section is missing or empty.
 
-The release workflow validates the Rust checks, the Python sdist, the CPython 3.10 through 3.14 Python wheel matrix for Windows x64, Linux x64, and macOS arm64, the source overlay, the native package matrix for Windows x64, Linux x64, and macOS arm64, and the prebuilt vcpkg overlay artifacts, then creates the Git tag and GitHub release before publishing to crates.io and PyPI.
+Before triggering a release, make sure the repository has configured `CARGO_REGISTRY_TOKEN` for crates.io. npm uses GitHub Actions trusted publishing, so configure a trusted publisher for both `@morningfrog/vvcm-rs` and `vvcm-rs` on npmjs.com before running the workflow. PyPI publishing uses the configured GitHub trusted publisher identity.
+
+The release workflow validates the Rust checks, the WebAssembly npm package, the TypeScript declaration smoke test, the Python sdist, the CPython 3.10 through 3.14 Python wheel matrix for Windows x64, Linux x64, and macOS arm64, the source overlay, the native package matrix for Windows x64, Linux x64, and macOS arm64, and the prebuilt vcpkg overlay artifacts, then creates the Git tag and GitHub release before publishing to crates.io, npm through trusted publishing, and PyPI.
+
+The npm release publishes both `@morningfrog/vvcm-rs` and `vvcm-rs` from the same WebAssembly artifact through GitHub Actions trusted publishing. Keep `Cargo.toml`, `pyproject.toml`, `wasm/package.json`, `vcpkg/ports/vvcm-rs/vcpkg.json`, and `vcpkg/prebuilt-ports/vvcm-rs/vcpkg.json` on the same version before running the workflow.
 
 ## Issue Guidelines
 

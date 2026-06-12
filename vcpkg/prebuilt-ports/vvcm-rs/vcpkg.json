@@ -1,6 +1,6 @@
 {
   "name": "vvcm-rs",
-  "version-semver": "1.1.0",
+  "version-semver": "1.2.0",
   "description": "C and C++ bindings for the vvcm-rs VVCM forward-kinematics library.",
   "homepage": "https://github.com/morningfrog/vvcm-rs",
   "license": "Apache-2.0"

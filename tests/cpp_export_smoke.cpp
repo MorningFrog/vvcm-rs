@@ -43,7 +43,7 @@ int main()
     // The exported package should report a usable version string.
     require(!version().empty(), "version should not be empty");
 
-    // Robot endpoints on the world-frame XY plane, using the millimeter-scale README sample.
+    // Robot formation: each Point2 is a robot node position on the world-coordinate XY plane, in millimeters.
     const std::vector<Point2> formation = {
         Point2(213.7f, 122.7f),
         Point2(804.6f, 37.2f),
@@ -51,7 +51,7 @@ int main()
         Point2(439.3f, 715.9f),
     };
 
-    // Sheet vertices in the sheet-local XY frame, using the same millimeter-scale sample data.
+    // Unfolded sheet: each Point2 is a vertex in the sheet's local coordinate frame, in millimeters.
     const std::vector<Point2> sheet = {
         Point2(-316.1f, -421.9f),
         Point2(803.4f, -384.1f),
