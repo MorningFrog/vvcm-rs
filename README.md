@@ -6,6 +6,8 @@ Rust implementation for kinematics of multi-robot transporting systems with a de
 
 If you plan to modify the codebase, read [CONTRIBUTING.md](CONTRIBUTING.md) first for workflow, structure, and release expectations.
 
+**Open the visual test bench at [vvcm-web](https://morningfrog.github.io/vvcm-web/).**
+
 ## Citation
 
 If you use the forward kinematics algorithm, please cite:
