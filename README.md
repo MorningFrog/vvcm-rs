@@ -8,6 +8,8 @@ If you plan to modify the codebase, read [CONTRIBUTING.md](CONTRIBUTING.md) firs
 
 **Open the visual test bench at [vvcm-web](https://morningfrog.github.io/vvcm-web/).**
 
+[![VVCM Visual Test Bench live preview](https://api.microlink.io/?url=https%3A%2F%2Fmorningfrog.github.io%2Fvvcm-web%2F&screenshot=true&viewport.width=1920&viewport.height=1080&embed=screenshot.url)](https://morningfrog.github.io/vvcm-web/)
+
 ## Citation
 
 If you use the forward kinematics algorithm, please cite:
