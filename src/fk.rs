@@ -11,9 +11,13 @@ use nalgebra::{DMatrix, DVector};
 
 // Numerical thresholds are intentionally local to the solver because changing
 // them affects branch enumeration and stability classification.
+/// Singular values below this threshold are treated as zero for rank checks.
 const RANK_EPS: Scalar = 1.0e-4;
+/// Stability threshold for classifying solutions.
 const STABILITY_EPS: Scalar = 1.0e-8;
+/// Slack threshold for determining cable tension.
 const SLACK_EPS: Scalar = 1.0e-8;
+/// Upper bound for normalized coordinates.
 const NORMALIZED_COORDINATE_UPPER_BOUND: Scalar = 1000.0;
 
 /// Stateful forward-kinematics engine for a fixed deformable sheet.
@@ -23,11 +27,21 @@ const NORMALIZED_COORDINATE_UPPER_BOUND: Scalar = 1000.0;
 /// solution cache with the result for the supplied formation.
 #[derive(Debug, Clone)]
 pub struct VvcmFk {
+    /// The number of robots/sheet vertices.
     robot_count: usize,
+    /// The fixed height of the robot end-effectors above the sheet plane,
+    /// used to recover the object Z coordinate.
     hold_height: Scalar,
+    /// The fixed sheet geometry, `robot_count` x 2.
     sheet: SheetShape,
+    /// The most recent robot formation cache, `robot_count` x 2. None before the first update.
     formation: Option<RobotFormation>,
+    /// The most recent solution cache, cleared before each update.
+    /// Candidate branches are always stored, but all stable flags may be false.
     solutions: FkSolutions,
+    /// The normalization transform for the most recent update,
+    /// used to map solutions back to the caller's original coordinate frames.
+    /// None before the first update.
     last_normalization: Option<NormalizationTransform>,
 }
 
@@ -322,10 +336,18 @@ impl VvcmFk {
 /// Candidate solution plus intermediate values needed by stability filtering.
 #[derive(Debug, Clone)]
 struct CandidateSolution {
+    /// The computed solution for specific taut cable configurations.
     solution: FkSolution,
+    /// The number of taut cables.
     taut_count: usize,
+    /// The number of taut cables that are independent in the linearized system, used
+    /// to determine the size of the search for a non-negative multiplier representation.
     independent_taut_count: usize,
+    /// The raw Lagrange multipliers for the candidate solution, used to test local minimality.
     lambda: DVector<Scalar>,
+    /// The basis transform for degenerate taut sets, used to search for a non-negative
+    /// multiplier representation. None for non-degenerate candidates or when
+    /// the solver does not support this search.
     omega: Option<DMatrix<Scalar>>,
 }
 
