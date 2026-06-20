@@ -318,12 +318,15 @@ impl VvcmFk {
             }
         }
 
+        let lambda_values = lambda.iter().copied().collect();
+
         Some(CandidateSolution {
-            solution: FkSolution::new(
+            solution: FkSolution::new_with_lambda_values(
                 false,
                 Point3::new(x_o, y_o, z_o),
                 Point2::new(x_vo, y_vo),
                 taut_cables.to_vec(),
+                lambda_values,
             ),
             taut_count,
             independent_taut_count,

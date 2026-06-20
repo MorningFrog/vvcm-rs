@@ -20,6 +20,7 @@ struct FkSolutionOutput {
     po: Point3Output,
     vo: Point2Output,
     taut_cables: Vec<usize>,
+    lambda_values: Vec<f32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -69,9 +70,26 @@ fn fk_readme_sample_matches_expected_solutions() {
         0.05,
     );
     assert_eq!(stable[0].taut_cables, vec![0, 1, 2]);
+    assert_eq!(stable[0].lambda_values.len(), stable[0].taut_cables.len());
+    assert!(
+        stable[0]
+            .lambda_values
+            .iter()
+            .all(|value| value.is_finite())
+    );
+    assert!(
+        stable[0]
+            .lambda_values
+            .iter()
+            .all(|value| *value >= -1.0e-4)
+    );
 
     let stable_value: Vec<FkSolutionOutput> = from_js(fk.stable_solutions().unwrap());
     assert_eq!(stable_value.len(), 2);
+    assert_eq!(
+        stable_value[0].lambda_values.len(),
+        stable_value[0].taut_cables.len()
+    );
 }
 
 #[wasm_bindgen_test]

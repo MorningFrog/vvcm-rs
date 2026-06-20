@@ -44,7 +44,7 @@ For the original VVCM model, please cite:
 
 This package includes `vvcm-rs` for Rust, JavaScript/TypeScript, Python, and C/C++ users with:
 
-- A Rust VVCM forward-kinematics API built around `Point2`, `Point3`, `RobotFormation`, `SheetShape`, and `FkSolution`.
+- A Rust VVCM forward-kinematics API built around `Point2`, `Point3`, `RobotFormation`, `SheetShape`, and `FkSolution` values that include taut-cable lambda coefficients.
 - Stable-solution search with taut-cable enumeration, candidate solving, and stable-branch filtering.
 - Velocity-driven and manual simulation wrappers.
 - WebAssembly bindings published to npm as `@morningfrog/vvcm-rs` and the unscoped mirror `vvcm-rs`, with hand-written TypeScript declarations.
@@ -163,16 +163,23 @@ fn main() -> Result<(), VvcmError> {
     println!("all solutions: {}", solutions.all_count());
     println!("stable solutions: {}", solutions.stable_count());
 
-    // Print each stable branch with object pose, virtual object point, and taut cables.
+    // Print each stable branch with object pose, virtual object point, taut cables, and matching lambda values.
     for (index, solution) in solutions.stable().enumerate() {
+        let lambda_values = solution
+            .lambda_values
+            .iter()
+            .map(|value| format!("{value:.3}"))
+            .collect::<Vec<_>>()
+            .join(", ");
         println!(
-            "#{index}: Po=({:.3}, {:.3}, {:.3}), Vo=({:.3}, {:.3}), taut={:?}",
+            "#{index}: Po=({:.3}, {:.3}, {:.3}), Vo=({:.3}, {:.3}), taut={:?}, lambda=[{}]",
             solution.po.x,
             solution.po.y,
             solution.po.z,
             solution.vo.x,
             solution.vo.y,
             solution.taut_cables,
+            lambda_values,
         );
     }
 
@@ -185,8 +192,8 @@ Expected output:
 ```text
 all solutions: 3
 stable solutions: 2
-#0: Po=(568.841, 324.728, 336.736), Vo=(238.633, 125.028), taut=[0, 1, 2]
-#1: Po=(557.919, 341.232, 337.247), Vo=(208.794, 152.532), taut=[0, 2, 3]
+#0: Po=(568.841, 324.728, 336.736), Vo=(238.633, 125.028), taut=[0, 1, 2], lambda=[0.480, 0.039, 0.481]
+#1: Po=(557.919, 341.232, 337.247), Vo=(208.794, 152.532), taut=[0, 2, 3], lambda=[0.493, 0.495, 0.012]
 ```
 
 ### JavaScript and TypeScript Usage
@@ -222,15 +229,17 @@ const solutions = fk.updateStableSolutions(formation);
 console.log(`all solutions: ${solutions.allCount}`);
 console.log(`stable solutions: ${solutions.stableCount}`);
 
-// Print each stable branch with object pose, virtual object point, and taut cables.
+// Print each stable branch with object pose, virtual object point, taut cables, and matching lambda values.
 solutions.solutions
   .filter((solution) => solution.stable)
   .forEach((solution, index) => {
     const po = solution.po;
     const vo = solution.vo;
+    const lambdaValues = solution.lambdaValues.map((value) => value.toFixed(3)).join(", ");
     console.log(
       `#${index}: Po=(${po.x.toFixed(3)}, ${po.y.toFixed(3)}, ${po.z.toFixed(3)}), ` +
-        `Vo=(${vo.x.toFixed(3)}, ${vo.y.toFixed(3)}), taut=${JSON.stringify(solution.tautCables)}`,
+        `Vo=(${vo.x.toFixed(3)}, ${vo.y.toFixed(3)}), taut=${JSON.stringify(solution.tautCables)}, ` +
+        `lambda=[${lambdaValues}]`,
     );
   });
 
@@ -242,8 +251,8 @@ Expected output:
 ```text
 all solutions: 3
 stable solutions: 2
-#0: Po=(568.841, 324.728, 336.736), Vo=(238.633, 125.028), taut=[0,1,2]
-#1: Po=(557.919, 341.232, 337.247), Vo=(208.794, 152.532), taut=[0,2,3]
+#0: Po=(568.841, 324.728, 336.736), Vo=(238.633, 125.028), taut=[0,1,2], lambda=[0.480, 0.039, 0.481]
+#1: Po=(557.919, 341.232, 337.247), Vo=(208.794, 152.532), taut=[0,2,3], lambda=[0.493, 0.495, 0.012]
 ```
 
 ### C++ Usage
@@ -291,7 +300,7 @@ int main() {
     std::cout << "all solutions: " << solutions.all_count() << "\n";
     std::cout << "stable solutions: " << solutions.stable_count() << "\n";
 
-    // Print each stable branch with object pose, virtual object point, and taut cables.
+    // Print each stable branch with object pose, virtual object point, taut cables, and matching lambda values.
     std::cout << std::fixed << std::setprecision(3);
     const std::vector<FkSolution> stable = solutions.stable();
     for (std::size_t index = 0; index < stable.size(); ++index) {
@@ -308,6 +317,13 @@ int main() {
             }
             std::cout << solution.taut_cables[taut_index];
         }
+        std::cout << "], lambda=[";
+        for (std::size_t lambda_index = 0; lambda_index < solution.lambda_values.size(); ++lambda_index) {
+            if (lambda_index > 0) {
+                std::cout << ", ";
+            }
+            std::cout << solution.lambda_values[lambda_index];
+        }
         std::cout << "]\n";
     }
 }
@@ -318,8 +334,8 @@ Expected output:
 ```text
 all solutions: 3
 stable solutions: 2
-#0: Po=(568.841, 324.728, 336.736), Vo=(238.633, 125.028), taut=[0, 1, 2]
-#1: Po=(557.919, 341.232, 337.247), Vo=(208.794, 152.532), taut=[0, 2, 3]
+#0: Po=(568.841, 324.728, 336.736), Vo=(238.633, 125.028), taut=[0, 1, 2], lambda=[0.480, 0.039, 0.481]
+#1: Po=(557.919, 341.232, 337.247), Vo=(208.794, 152.532), taut=[0, 2, 3], lambda=[0.493, 0.495, 0.012]
 ```
 
 ### Python Usage
@@ -353,11 +369,13 @@ solutions = fk.update_stable_solutions(formation)
 print(f"all solutions: {solutions.all_count()}")
 print(f"stable solutions: {solutions.stable_count()}")
 
-# Print each stable branch with object pose, virtual object point, and taut cables.
+# Print each stable branch with object pose, virtual object point, taut cables, and matching lambda values.
 for index, solution in enumerate(solutions.stable()):
+    lambda_values = ", ".join(f"{value:.3f}" for value in solution.lambda_values)
     print(
         f"#{index}: Po=({solution.po.x:.3f}, {solution.po.y:.3f}, {solution.po.z:.3f}), "
-        f"Vo=({solution.vo.x:.3f}, {solution.vo.y:.3f}), taut={solution.taut_cables}"
+        f"Vo=({solution.vo.x:.3f}, {solution.vo.y:.3f}), taut={solution.taut_cables}, "
+        f"lambda=[{lambda_values}]"
     )
 ```
 
@@ -366,9 +384,11 @@ Expected output:
 ```text
 all solutions: 3
 stable solutions: 2
-#0: Po=(568.841, 324.728, 336.736), Vo=(238.633, 125.028), taut=[0, 1, 2]
-#1: Po=(557.919, 341.232, 337.247), Vo=(208.794, 152.532), taut=[0, 2, 3]
+#0: Po=(568.841, 324.728, 336.736), Vo=(238.633, 125.028), taut=[0, 1, 2], lambda=[0.480, 0.039, 0.481]
+#1: Po=(557.919, 341.232, 337.247), Vo=(208.794, 152.532), taut=[0, 2, 3], lambda=[0.493, 0.495, 0.012]
 ```
+
+For every returned `FkSolution`, `lambda_values` is taut-only: `lambda_values[i]` corresponds to `taut_cables[i]`. Slack cables are omitted instead of represented by zero-valued placeholders.
 
 Length units are not encoded in the API. Use one consistent unit for formation coordinates, sheet coordinates, and hold height; `VvcmFk` normalizes coordinates internally for numerical stability and maps returned object positions and virtual object points back to the original coordinate frames.
 

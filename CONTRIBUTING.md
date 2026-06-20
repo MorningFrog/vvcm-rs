@@ -66,12 +66,12 @@ For C++ export work and tests, install a C++17 compiler. On Windows, MSVC is rec
 
 ### 3. Install Python Binding Tools
 
-Use a virtual environment for Python binding development and tests:
+Use a `uv` virtual environment for Python binding development and tests:
 
 ```bash
-python -m venv .venv
+uv venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip maturin pytest numpy
+uv pip install maturin pytest numpy
 ```
 
 ### 4. Install WebAssembly and npm Tools

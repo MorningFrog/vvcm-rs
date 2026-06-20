@@ -361,19 +361,21 @@ struct PyFkSolution {
 #[pymethods]
 impl PyFkSolution {
     #[new]
-    #[pyo3(signature = (stable=false, po=None, vo=None, taut_cables=None))]
+    #[pyo3(signature = (stable=false, po=None, vo=None, taut_cables=None, lambda_values=None))]
     /// Create a forward-kinematics solution value.
     fn new(
         stable: bool,
         po: Option<&Bound<'_, PyAny>>,
         vo: Option<&Bound<'_, PyAny>>,
         taut_cables: Option<Vec<usize>>,
+        lambda_values: Option<Vec<Scalar>>,
     ) -> PyResult<Self> {
-        Ok(Self::from_inner(FkSolution::new(
+        Ok(Self::from_inner(FkSolution::new_with_lambda_values(
             stable,
             optional_point3(po)?,
             optional_point2(vo)?,
             taut_cables.unwrap_or_default(),
+            lambda_values.unwrap_or_default(),
         )))
     }
 
@@ -423,10 +425,25 @@ impl PyFkSolution {
         self.inner.taut_cables = value;
     }
 
+    #[getter]
+    /// Lagrange multiplier coefficients for the taut virtual cables.
+    fn lambda_values(&self) -> Vec<Scalar> {
+        self.inner.lambda_values.clone()
+    }
+
+    #[setter]
+    fn set_lambda_values(&mut self, value: Vec<Scalar>) {
+        self.inner.lambda_values = value;
+    }
+
     fn __repr__(&self) -> String {
         format!(
-            "FkSolution(stable={}, po={:?}, vo={:?}, taut_cables={:?})",
-            self.inner.stable, self.inner.po, self.inner.vo, self.inner.taut_cables
+            "FkSolution(stable={}, po={:?}, vo={:?}, taut_cables={:?}, lambda_values={:?})",
+            self.inner.stable,
+            self.inner.po,
+            self.inner.vo,
+            self.inner.taut_cables,
+            self.inner.lambda_values
         )
     }
 }

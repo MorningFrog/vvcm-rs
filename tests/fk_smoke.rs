@@ -18,6 +18,10 @@ fn readme_sample_matches_expected_solutions() {
 
     assert_eq!(solutions.all_count(), 3);
     assert_eq!(solutions.stable_count(), 2);
+    for solution in solutions.iter() {
+        assert_eq!(solution.lambda_values.len(), solution.taut_cables.len());
+        assert!(solution.lambda_values.iter().all(|value| value.is_finite()));
+    }
 
     // Check the stable branches in the order returned by the solver.
     let stable: Vec<_> = solutions.stable().collect();
@@ -28,6 +32,7 @@ fn readme_sample_matches_expected_solutions() {
     );
     assert_point2_close(stable[0].vo, Point2::new(238.6181, 125.02439), 0.05);
     assert_eq!(stable[0].taut_cables, vec![0, 1, 2]);
+    assert_nonnegative_lambda_values(&stable[0].lambda_values);
 
     assert_point3_close(
         stable[1].po,
@@ -36,6 +41,7 @@ fn readme_sample_matches_expected_solutions() {
     );
     assert_point2_close(stable[1].vo, Point2::new(208.79898, 152.53357), 0.05);
     assert_eq!(stable[1].taut_cables, vec![0, 2, 3]);
+    assert_nonnegative_lambda_values(&stable[1].lambda_values);
 
     // The full set should still contain at least one unstable branch.
     assert!(solutions.iter().any(|solution| !solution.stable));
@@ -68,6 +74,7 @@ fn meter_scale_inputs_return_meter_scale_solutions() {
     for (meter, millimeter) in meter_solutions.iter().zip(millimeter_solutions.iter()) {
         assert_eq!(meter.stable, millimeter.stable);
         assert_eq!(meter.taut_cables, millimeter.taut_cables);
+        assert_slice_close(&meter.lambda_values, &millimeter.lambda_values, 1.0e-3);
         assert_point3_close(meter.po, scaled_point3(millimeter.po, scale), 1.0e-4);
         assert_point2_close(meter.vo, scaled_point2(millimeter.vo, scale), 1.0e-4);
     }
@@ -99,6 +106,7 @@ fn independently_translated_inputs_map_solutions_back_to_original_frames() {
     for (translated, base) in translated_solutions.iter().zip(base_solutions.iter()) {
         assert_eq!(translated.stable, base.stable);
         assert_eq!(translated.taut_cables, base.taut_cables);
+        assert_slice_close(&translated.lambda_values, &base.lambda_values, 1.0e-3);
         assert_point3_close(
             translated.po,
             base.po.translated_xy_by(formation_offset),
@@ -128,6 +136,7 @@ fn fk_solutions_track_stability_per_solution() {
 
     assert_eq!(solutions.all_count(), 2);
     assert_eq!(solutions.stable_count(), 1);
+    assert!(solutions.solutions[0].lambda_values.is_empty());
     assert_eq!(
         solutions.stable().next().unwrap().po,
         Point3::new(6.0, 7.0, 8.0)
@@ -316,4 +325,21 @@ fn assert_point3_close(actual: Point3, expected: Point3, tolerance: Scalar) {
         actual.z,
         expected.z
     );
+}
+
+fn assert_nonnegative_lambda_values(values: &[Scalar]) {
+    assert!(
+        values.iter().all(|value| *value >= -1.0e-4),
+        "lambda values should be non-negative for stable solutions: {values:?}"
+    );
+}
+
+fn assert_slice_close(actual: &[Scalar], expected: &[Scalar], tolerance: Scalar) {
+    assert_eq!(actual.len(), expected.len());
+    for (index, (actual, expected)) in actual.iter().zip(expected).enumerate() {
+        assert!(
+            (*actual - *expected).abs() <= tolerance,
+            "index {index} differs: actual {actual}, expected {expected}"
+        );
+    }
 }

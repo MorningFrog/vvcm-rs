@@ -5,6 +5,7 @@ import pytest
 
 from vvcm_rs import (
     DimensionMismatchError,
+    FkSolution,
     InfeasibleFormationError,
     NoSolutionError,
     NoStableSolutionError,
@@ -34,9 +35,15 @@ def test_fk_sample_accepts_numpy_arrays_and_returns_stable_solutions():
     assert_point3_close(stable[0].po, Point3(568.8123, 324.72644, 336.73608), 0.05)
     assert_point2_close(stable[0].vo, Point2(238.6181, 125.02439), 0.05)
     assert stable[0].taut_cables == [0, 1, 2]
+    assert len(stable[0].lambda_values) == len(stable[0].taut_cables)
+    assert all(math.isfinite(value) for value in stable[0].lambda_values)
+    assert all(value >= -1.0e-4 for value in stable[0].lambda_values)
     assert_point3_close(stable[1].po, Point3(557.9307, 341.23087, 337.2464), 0.05)
     assert_point2_close(stable[1].vo, Point2(208.79898, 152.53357), 0.05)
     assert stable[1].taut_cables == [0, 2, 3]
+    assert len(stable[1].lambda_values) == len(stable[1].taut_cables)
+    assert all(math.isfinite(value) for value in stable[1].lambda_values)
+    assert all(value >= -1.0e-4 for value in stable[1].lambda_values)
 
     # The nearest-stable helper should pick the branch closest to the query point.
     closest_index, closest = solutions.closest_stable_to((560.0, 340.0, 337.0))
@@ -59,6 +66,11 @@ def test_domain_types_accept_lists_and_point_instances():
     sheet = SheetShape([Point2(0.0, 0.0), Point2(1.0, 0.0), Point2(0.0, 1.0)])
     assert len(sheet) == 3
     assert sheet.vertices[2].as_tuple() == (0.0, 1.0)
+
+    solution = FkSolution(True, (1.0, 2.0, 3.0), (4.0, 5.0), [0, 2], [0.25, 0.75])
+    assert solution.lambda_values == [0.25, 0.75]
+    solution.lambda_values = [0.5, 0.5]
+    assert solution.lambda_values == [0.5, 0.5]
 
 
 def test_aliases_match_cpp_style_class_names():

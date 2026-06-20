@@ -37,11 +37,11 @@ const fk = new VvcmFk(4, 1000, sheet);
 const solutions = fk.updateStableSolutions(formation);
 
 for (const solution of solutions.solutions.filter((item) => item.stable)) {
-  console.log(solution.po, solution.vo, solution.tautCables);
+  console.log(solution.po, solution.vo, solution.tautCables, solution.lambdaValues);
 }
 ```
 
-`Point2Input` values can be `[x, y]` tuples or `{ x, y }` objects. `Point3Input` values can be `[x, y, z]` tuples or `{ x, y, z }` objects.
+`Point2Input` values can be `[x, y]` tuples or `{ x, y }` objects. `Point3Input` values can be `[x, y, z]` tuples or `{ x, y, z }` objects. For each FK solution, `lambdaValues[i]` corresponds to `tautCables[i]`; slack cables are omitted.
 
 ## TypeScript
 

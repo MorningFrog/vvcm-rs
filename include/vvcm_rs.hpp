@@ -137,6 +137,7 @@ namespace vvcm_rs
         Point3 po{};
         Point2 vo{};
         std::vector<size_t> taut_cables{};
+        std::vector<float> lambda_values{};
     };
 
     class FkSolutions
@@ -338,6 +339,16 @@ namespace vvcm_rs
                 }
 
                 solution.taut_cables.assign(raw.taut_cables, raw.taut_cables + raw.taut_cable_count);
+            }
+
+            if (raw.lambda_value_count != 0)
+            {
+                if (raw.lambda_values == nullptr)
+                {
+                    throw Error(VVCM_RS_ERROR_INVALID_ARGUMENT, "malformed lambda value list returned by vvcm-rs");
+                }
+
+                solution.lambda_values.assign(raw.lambda_values, raw.lambda_values + raw.lambda_value_count);
             }
 
             return solution;

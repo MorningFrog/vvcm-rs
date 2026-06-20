@@ -62,6 +62,7 @@ export interface FkSolutionOutput {
   po: Point3;
   vo: Point2;
   tautCables: number[];
+  lambdaValues: number[];
 }
 
 export interface FkSolutionsOutput {

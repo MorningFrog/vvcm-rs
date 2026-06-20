@@ -42,6 +42,8 @@ typedef struct VvcmRsFkSolution
     VvcmRsPoint2 vo;
     const size_t *taut_cables;
     size_t taut_cable_count;
+    const float *lambda_values;
+    size_t lambda_value_count;
 } VvcmRsFkSolution;
 
 typedef struct VvcmRsFk VvcmRsFk;

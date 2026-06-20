@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.0 - 2026-06-20
+
+- Added taut-cable `lambda_values` to FK solutions across Rust, Python, WebAssembly/TypeScript, and C/C++ exports. C `VvcmRsFkSolution` and Rust `FkSolution` now include an additional public field, so old headers should not be mixed with new native libraries.
+- Updated Python development setup instructions to use a `uv` virtual environment.
+
 ## 1.2.0 - 2026-06-12
 
 - Added WebAssembly bindings for frontend usage with `wasm-bindgen`, covering forward kinematics, velocity-driven simulation, and manual simulation wrappers.

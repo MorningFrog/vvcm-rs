@@ -334,6 +334,7 @@ struct FkSolutionOutput {
     po: Point3Output,
     vo: Point2Output,
     taut_cables: Vec<usize>,
+    lambda_values: Vec<Scalar>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -387,6 +388,7 @@ fn solution_output(solution: &FkSolution) -> FkSolutionOutput {
         po: Point3Output::from(solution.po),
         vo: Point2Output::from(solution.vo),
         taut_cables: solution.taut_cables.clone(),
+        lambda_values: solution.lambda_values.clone(),
     }
 }
 

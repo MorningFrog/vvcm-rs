@@ -252,7 +252,8 @@ impl SheetShape {
 /// `po` is the object position in the current formation frame, `vo` is the
 /// corresponding virtual object point in the sheet-local frame, and
 /// `taut_cables` contains the robot indices whose virtual cables are taut for
-/// this solution.
+/// this solution. `lambda_values` stores the corresponding Lagrange multiplier
+/// coefficients in the same order as `taut_cables`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct FkSolution {
     /// Whether the candidate is locally stable according to the VVCM stability
@@ -264,16 +265,35 @@ pub struct FkSolution {
     pub vo: Point2,
     /// Indices of the taut virtual cables for this candidate.
     pub taut_cables: Vec<usize>,
+    /// Lagrange multiplier coefficients for the taut virtual cables.
+    ///
+    /// This is a taut-only vector: `lambda_values[i]` corresponds to
+    /// `taut_cables[i]`. Slack cables are omitted rather than represented by
+    /// zero-valued placeholders.
+    pub lambda_values: Vec<Scalar>,
 }
 
 impl FkSolution {
     /// Creates a forward-kinematics solution value.
     pub fn new(stable: bool, po: Point3, vo: Point2, taut_cables: Vec<usize>) -> Self {
+        Self::new_with_lambda_values(stable, po, vo, taut_cables, Vec::new())
+    }
+
+    /// Creates a forward-kinematics solution value with taut-cable lambda
+    /// coefficients.
+    pub fn new_with_lambda_values(
+        stable: bool,
+        po: Point3,
+        vo: Point2,
+        taut_cables: Vec<usize>,
+        lambda_values: Vec<Scalar>,
+    ) -> Self {
         Self {
             stable,
             po,
             vo,
             taut_cables,
+            lambda_values,
         }
     }
 }

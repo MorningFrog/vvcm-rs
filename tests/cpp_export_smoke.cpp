@@ -34,6 +34,18 @@ namespace
     {
         require(close_to(actual.x, expected.x, tolerance) && close_to(actual.y, expected.y, tolerance) && close_to(actual.z, expected.z, tolerance), message);
     }
+
+    bool lambda_values_are_stable(const std::vector<float> &values)
+    {
+        for (float value : values)
+        {
+            if (!std::isfinite(value) || value < -1.0e-4f)
+            {
+                return false;
+            }
+        }
+        return true;
+    }
 } // namespace
 
 int main()
@@ -77,9 +89,13 @@ int main()
     require_point3(stable[0].po, Point3(568.8123f, 324.72644f, 336.73608f), 0.05f, "first stable Po mismatch");
     require_point2(stable[0].vo, Point2(238.6181f, 125.02439f), 0.05f, "first stable Vo mismatch");
     require(stable[0].taut_cables.size() == 3 && stable[0].taut_cables[0] == 0 && stable[0].taut_cables[1] == 1 && stable[0].taut_cables[2] == 2, "first stable taut cable set mismatch");
+    require(stable[0].lambda_values.size() == stable[0].taut_cables.size(), "first stable lambda value count mismatch");
+    require(lambda_values_are_stable(stable[0].lambda_values), "first stable lambda values should be finite and non-negative");
     require_point3(stable[1].po, Point3(557.9307f, 341.23087f, 337.2464f), 0.05f, "second stable Po mismatch");
     require_point2(stable[1].vo, Point2(208.79898f, 152.53357f), 0.05f, "second stable Vo mismatch");
     require(stable[1].taut_cables.size() == 3 && stable[1].taut_cables[0] == 0 && stable[1].taut_cables[1] == 2 && stable[1].taut_cables[2] == 3, "second stable taut cable set mismatch");
+    require(stable[1].lambda_values.size() == stable[1].taut_cables.size(), "second stable lambda value count mismatch");
+    require(lambda_values_are_stable(stable[1].lambda_values), "second stable lambda values should be finite and non-negative");
 
     // Wrapper-only no-stable errors should also expose a stable error code.
     try

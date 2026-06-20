@@ -33,6 +33,7 @@ function smoke(): number {
   const fk = new VvcmFk(4, 1000, sheet);
   const solutions: FkSolutionsOutput = fk.updateStableSolutions(formation);
   const stable = fk.stableSolutions();
+  const lambdaValues: number[] = stable[0]?.lambdaValues ?? [];
   const robotCount: number = fk.robotCount();
   const holdHeight: number = fk.holdHeight();
   fk.free();
@@ -66,6 +67,7 @@ function smoke(): number {
     version().length +
     solutions.allCount +
     stable.length +
+    lambdaValues.length +
     robotCount +
     holdHeight +
     absoluteObject.z +

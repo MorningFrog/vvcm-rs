@@ -196,6 +196,7 @@ class FkSolution:
         po: Optional[Point3Input] = None,
         vo: Optional[Point2Input] = None,
         taut_cables: Optional[Sequence[int]] = None,
+        lambda_values: Optional[Sequence[float]] = None,
     ) -> None:
         """Create a forward-kinematics solution value."""
 
@@ -226,6 +227,13 @@ class FkSolution:
 
     @taut_cables.setter
     def taut_cables(self, value: Sequence[int]) -> None: ...
+
+    @property
+    def lambda_values(self) -> Sequence[float]:
+        """Lagrange multiplier coefficients for the taut virtual cables."""
+
+    @lambda_values.setter
+    def lambda_values(self, value: Sequence[float]) -> None: ...
 
 
 class FkSolutions:

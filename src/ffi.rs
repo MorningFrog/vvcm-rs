@@ -58,6 +58,8 @@ pub struct VvcmRsFkSolution {
     pub vo: VvcmRsPoint2,
     pub taut_cables: *const usize,
     pub taut_cable_count: usize,
+    pub lambda_values: *const f32,
+    pub lambda_value_count: usize,
 }
 
 impl Default for VvcmRsFkSolution {
@@ -68,6 +70,8 @@ impl Default for VvcmRsFkSolution {
             vo: VvcmRsPoint2::default(),
             taut_cables: ptr::null(),
             taut_cable_count: 0,
+            lambda_values: ptr::null(),
+            lambda_value_count: 0,
         }
     }
 }
@@ -816,6 +820,12 @@ fn solution_to_ffi(solution: &crate::FkSolution) -> VvcmRsFkSolution {
             solution.taut_cables.as_ptr()
         },
         taut_cable_count: solution.taut_cables.len(),
+        lambda_values: if solution.lambda_values.is_empty() {
+            ptr::null()
+        } else {
+            solution.lambda_values.as_ptr()
+        },
+        lambda_value_count: solution.lambda_values.len(),
     }
 }
 

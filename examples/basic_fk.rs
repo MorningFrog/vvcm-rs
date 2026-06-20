@@ -27,16 +27,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("all solutions: {}", solutions.all_count());
     println!("stable solutions: {}", solutions.stable_count());
 
-    // Print each stable branch with object pose, planar velocity, and taut cables.
+    // Print each stable branch with object pose, virtual object point, taut cables, and matching lambda values.
     for (index, solution) in solutions.stable().enumerate() {
+        let lambda_values = solution
+            .lambda_values
+            .iter()
+            .map(|value| format!("{value:.3}"))
+            .collect::<Vec<_>>()
+            .join(", ");
         println!(
-            "#{index}: Po=({:.3}, {:.3}, {:.3}), Vo=({:.3}, {:.3}), taut={:?}",
+            "#{index}: Po=({:.3}, {:.3}, {:.3}), Vo=({:.3}, {:.3}), taut={:?}, lambda=[{}]",
             solution.po.x,
             solution.po.y,
             solution.po.z,
             solution.vo.x,
             solution.vo.y,
             solution.taut_cables,
+            lambda_values,
         );
     }
 
