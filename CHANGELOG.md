@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.0.0 - Unreleased
+## 2.0.0 - 2026-06-22
 
 - Breaking: replaced the wrapper-heavy public geometry model with `nalgebra`-first Rust aliases and slice-based formation inputs. `RobotFormation` and `SheetShape` are removed, and `VvcmFk::new` now derives the robot count from the sheet.
 - Breaking: changed Python bindings to a NumPy-first API. Formation, sheet, velocity, and point inputs must be C-contiguous `float32` arrays, and FK results are exposed as `FkSolution` objects instead of flattened buffers.
