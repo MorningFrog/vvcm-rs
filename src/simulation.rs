@@ -8,7 +8,7 @@
 
 use crate::error::VvcmError;
 use crate::fk::VvcmFk;
-use crate::types::{Point2, Point3, RobotFormation, Scalar, SheetShape};
+use crate::types::{Point2, Point3, Scalar, Vector2, relative_xy_to, translated_xy_by};
 
 /// Fixed-step robot-velocity simulation built on [`VvcmFk`].
 ///
@@ -19,12 +19,13 @@ use crate::types::{Point2, Point3, RobotFormation, Scalar, SheetShape};
 pub struct VvcmSimulation {
     fk_engine: VvcmFk,
     global_position: Point2,
-    formation: RobotFormation,
+    formation: Vec<Point2>,
+    absolute_formation: Vec<Point2>,
     object_position: Point3,
     taut_cables: Vec<usize>,
     solution_index: Option<usize>,
     dt: Scalar,
-    velocity: RobotFormation,
+    velocity: Vec<Vector2>,
 }
 
 impl VvcmSimulation {
@@ -39,29 +40,30 @@ impl VvcmSimulation {
     ///
     /// Returns any construction or solving error reported by [`VvcmFk`], or a
     /// [`VvcmError::DimensionMismatch`] if `initial_formation` does not contain
-    /// `robot_count` points.
+    /// one point per sheet vertex.
     pub fn new(
-        robot_count: usize,
         hold_height: Scalar,
-        sheet: SheetShape,
-        initial_formation: RobotFormation,
+        sheet: Vec<Point2>,
+        initial_formation: &[Point2],
         po_initial: Point3,
         dt: Scalar,
     ) -> Result<Self, VvcmError> {
-        let mut fk_engine = VvcmFk::new(robot_count, hold_height, sheet)?;
-        fk_engine.validate_formation(&initial_formation)?;
+        let mut fk_engine = VvcmFk::new(hold_height, sheet)?;
+        fk_engine.validate_formation(initial_formation)?;
 
-        let global_position = initial_formation.points()[0];
-        let formation = initial_formation.relative_to(global_position);
-        let reference = po_initial.relative_xy_to(global_position);
-        let velocity = RobotFormation::zeros(robot_count)?;
+        let global_position = initial_formation[0];
+        let formation = relative_points(initial_formation, global_position);
+        let absolute_formation = initial_formation.to_vec();
+        let reference = relative_xy_to(po_initial, global_position);
+        let velocity = vec![Vector2::new(0.0, 0.0); fk_engine.robot_count()];
         let (solution_index, object_position, taut_cables) =
-            solve_closest_stable(&mut fk_engine, formation.clone(), reference)?;
+            solve_closest_stable(&mut fk_engine, &formation, reference)?;
 
         Ok(Self {
             fk_engine,
             global_position,
             formation,
+            absolute_formation,
             object_position,
             taut_cables,
             solution_index: Some(solution_index),
@@ -77,11 +79,19 @@ impl VvcmSimulation {
     ///
     /// # Errors
     ///
-    /// Returns [`VvcmError::DimensionMismatch`] if the velocity formation size
-    /// does not match the simulation robot count.
-    pub fn set_velocity(&mut self, velocity: RobotFormation) -> Result<(), VvcmError> {
-        self.fk_engine.validate_formation(&velocity)?;
-        self.velocity = velocity;
+    /// Returns [`VvcmError::DimensionMismatch`] if the velocity count does not
+    /// match the simulation robot count.
+    pub fn set_velocity(&mut self, velocity: &[Vector2]) -> Result<(), VvcmError> {
+        if velocity.len() != self.fk_engine.robot_count() {
+            return Err(VvcmError::DimensionMismatch {
+                context: "robot velocity count",
+                expected: self.fk_engine.robot_count(),
+                actual: velocity.len(),
+            });
+        }
+
+        self.velocity.clear();
+        self.velocity.extend_from_slice(velocity);
         Ok(())
     }
 
@@ -97,7 +107,11 @@ impl VvcmSimulation {
     /// Returns any solving error reported by [`VvcmFk`] for the updated local
     /// formation.
     pub fn step(&mut self) -> Result<(), VvcmError> {
-        if self.velocity.all_zero() {
+        if self
+            .velocity
+            .iter()
+            .all(|velocity| velocity.x == 0.0 && velocity.y == 0.0)
+        {
             return Ok(());
         }
 
@@ -105,27 +119,20 @@ impl VvcmSimulation {
         // formation is updated by each robot's own displacement and then
         // re-centered by this global displacement, keeping robot 0 at the local
         // origin.
-        let delta_global = self.velocity.points()[0].scaled_by(self.dt);
-        self.global_position = self.global_position.translated_by(delta_global);
+        let delta_global = self.velocity[0] * self.dt;
+        self.global_position = Point2::new(
+            self.global_position.x + delta_global.x,
+            self.global_position.y + delta_global.y,
+        );
 
-        let points = self
-            .formation
-            .points()
-            .iter()
-            .zip(self.velocity.points())
-            .map(|(point, velocity)| {
-                point
-                    .translated_by(velocity.scaled_by(self.dt))
-                    .relative_to(delta_global)
-            })
-            .collect();
-        self.formation = RobotFormation::new(points)?;
+        for (point, velocity) in self.formation.iter_mut().zip(&self.velocity) {
+            point.x += velocity.x * self.dt - delta_global.x;
+            point.y += velocity.y * self.dt - delta_global.y;
+        }
+        self.refresh_absolute_formation();
 
-        let (solution_index, object_position, taut_cables) = solve_closest_stable(
-            &mut self.fk_engine,
-            self.formation.clone(),
-            self.object_position,
-        )?;
+        let (solution_index, object_position, taut_cables) =
+            solve_closest_stable(&mut self.fk_engine, &self.formation, self.object_position)?;
         self.solution_index = Some(solution_index);
         self.object_position = object_position;
         self.taut_cables = taut_cables;
@@ -134,13 +141,13 @@ impl VvcmSimulation {
     }
 
     /// Returns the current robot formation in absolute coordinates.
-    pub fn absolute_formation(&self) -> RobotFormation {
-        self.formation.translated_by(self.global_position)
+    pub fn absolute_formation(&self) -> &[Point2] {
+        &self.absolute_formation
     }
 
     /// Returns the selected object position in absolute coordinates.
     pub fn absolute_object_position(&self) -> Point3 {
-        self.object_position.translated_xy_by(self.global_position)
+        translated_xy_by(self.object_position, self.global_position)
     }
 
     /// Borrows the underlying FK engine and its latest solution cache.
@@ -154,7 +161,7 @@ impl VvcmSimulation {
     }
 
     /// Borrows the current robot formation in the local frame.
-    pub fn formation(&self) -> &RobotFormation {
+    pub fn formation(&self) -> &[Point2] {
         &self.formation
     }
 
@@ -178,16 +185,27 @@ impl VvcmSimulation {
         self.dt
     }
 
-    /// Borrows the current per-robot velocity formation.
-    pub fn velocity(&self) -> &RobotFormation {
+    /// Borrows the current per-robot velocities.
+    pub fn velocity(&self) -> &[Vector2] {
         &self.velocity
+    }
+
+    fn refresh_absolute_formation(&mut self) {
+        self.absolute_formation.clear();
+        self.absolute_formation
+            .extend(self.formation.iter().map(|point| {
+                Point2::new(
+                    point.x + self.global_position.x,
+                    point.y + self.global_position.y,
+                )
+            }));
     }
 }
 
 /// Runs FK for `formation` and picks the stable branch closest to `reference`.
 fn solve_closest_stable(
     fk_engine: &mut VvcmFk,
-    formation: RobotFormation,
+    formation: &[Point2],
     reference: Point3,
 ) -> Result<(usize, Point3, Vec<usize>), VvcmError> {
     let solutions = fk_engine.update_stable_solutions(formation)?;
@@ -196,4 +214,11 @@ fn solve_closest_stable(
         .ok_or(VvcmError::NoStableSolution)?;
 
     Ok((solution_index, solution.po, solution.taut_cables.clone()))
+}
+
+fn relative_points(points: &[Point2], origin: Point2) -> Vec<Point2> {
+    points
+        .iter()
+        .map(|point| Point2::new(point.x - origin.x, point.y - origin.y))
+        .collect()
 }

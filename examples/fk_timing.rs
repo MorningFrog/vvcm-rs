@@ -2,11 +2,12 @@
 
 use std::time::Instant;
 
-use vvcm_rs::{Point2, RobotFormation, SheetShape, VvcmFk};
+use vvcm_rs::{Point2, VvcmFk};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Robot formation: these 20 Point2 values are robot node positions on the world-coordinate XY plane, in millimeters.
-    let formation = RobotFormation::new(vec![
+    // Robot formation: these 20 Point2 values are robot node positions on the
+    // world-coordinate XY plane, in millimeters.
+    let formation = vec![
         Point2::new(576.276881720430, 162.627551020408),
         Point2::new(636.088709677419, 181.760204081633),
         Point2::new(677.083333333333, 225.127551020408),
@@ -27,10 +28,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Point2::new(503.024193548387, 296.556122448980),
         Point2::new(520.497311827957, 235.331632653062),
         Point2::new(542.674731182796, 188.137755102041),
-    ])?;
+    ];
 
-    // Unfolded sheet: each Point2 is a vertex in the sheet's local coordinate frame, in millimeters.
-    let sheet = SheetShape::new(vec![
+    // Unfolded sheet: each Point2 is a vertex in the sheet's local
+    // coordinate frame, in millimeters.
+    let sheet = vec![
         Point2::new(512.432795698925, 55.4846938775513),
         Point2::new(621.975806451613, 59.3112244897961),
         Point2::new(725.470430107527, 86.0969387755105),
@@ -51,14 +53,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Point2::new(206.653225806452, 325.892857142857),
         Point2::new(269.153225806452, 197.066326530613),
         Point2::new(384.072580645161, 106.505102040817),
-    ])?;
+    ];
 
     println!("----------------------");
 
     // Build the solver and time a single stable-solution update.
-    let mut fk = VvcmFk::new(20, 1000.0, sheet)?;
+    let mut fk = VvcmFk::new(1000.0, sheet)?;
     let start = Instant::now();
-    let solutions = fk.update_stable_solutions(formation)?;
+    let solutions = fk.update_stable_solutions(&formation)?;
     let elapsed = start.elapsed();
 
     // Print the solve time and the number of stable branches found.

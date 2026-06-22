@@ -1,33 +1,37 @@
-use vvcm_rs::{Point2, RobotFormation, SheetShape, VvcmFk};
+use vvcm_rs::{Point2, VvcmFk};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Robot formation: each Point2 is a robot node position on the world-coordinate XY plane, in millimeters.
-    let formation = RobotFormation::new(vec![
+    // Robot formation: each Point2 is a robot node position on the
+    // world-coordinate XY plane, in millimeters.
+    let formation = vec![
         Point2::new(213.7, 122.7),
         Point2::new(804.6, 37.2),
         Point2::new(904.0, 550.0),
         Point2::new(439.3, 715.9),
-    ])?;
+    ];
 
-    // Unfolded sheet: each Point2 is a vertex in the sheet's local coordinate frame, in millimeters.
-    let sheet = SheetShape::new(vec![
+    // Unfolded sheet: each Point2 is a vertex in the sheet's local
+    // coordinate frame, in millimeters.
+    let sheet = vec![
         Point2::new(-316.1, -421.9),
         Point2::new(803.4, -384.1),
         Point2::new(746.1, 712.8),
         Point2::new(-367.3, 664.2),
-    ])?;
+    ];
 
-    // Create the solver for four robots and a 1000 mm hold height.
-    let mut fk = VvcmFk::new(4, 1000.0, sheet)?;
+    // Create the solver with a 1000 mm hold height.
+    // The robot count is inferred from sheet.len().
+    let mut fk = VvcmFk::new(1000.0, sheet)?;
 
     // Enumerate all candidate equilibria for this robot formation.
-    let solutions = fk.update_stable_solutions(formation)?;
+    let solutions = fk.update_stable_solutions(&formation)?;
 
     // Report the total branch count and the subset that is stable.
     println!("all solutions: {}", solutions.all_count());
     println!("stable solutions: {}", solutions.stable_count());
 
-    // Print each stable branch with object pose, virtual object point, taut cables, and matching lambda values.
+    // Print each stable branch. lambda_values[i] belongs to taut_cables[i]
+    // on the same solution.
     for (index, solution) in solutions.stable().enumerate() {
         let lambda_values = solution
             .lambda_values

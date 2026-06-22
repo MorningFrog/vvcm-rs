@@ -1,15 +1,14 @@
 //! WebAssembly bindings for browser and bundler consumers.
 //!
-//! The bindings keep the core solver types private and expose plain JavaScript
-//! arrays and objects through `wasm-bindgen`.
+//! The bindings expose row-major typed arrays instead of per-point JavaScript
+//! objects. Formation, sheet, and velocity inputs are `Float32Array` values
+//! laid out as `[x0, y0, x1, y1, ...]`.
 
 use crate::{
-    FkSolution, FkSolutions, Point2, Point3, RobotFormation, Scalar, SheetShape,
-    VvcmError as CoreError, VvcmFk as CoreFk, VvcmManualSimulation as CoreManualSimulation,
-    VvcmSimulation as CoreSimulation,
+    FkSolutions, Point2, Point3, Scalar, Vector2, VvcmError as CoreError, VvcmFk as CoreFk,
+    VvcmManualSimulation as CoreManualSimulation, VvcmSimulation as CoreSimulation,
 };
-use js_sys::Reflect;
-use serde::{Deserialize, Serialize};
+use js_sys::{Array, Float32Array, Object, Reflect, Uint32Array};
 use wasm_bindgen::prelude::*;
 
 /// Returns the package version compiled into this WASM module.
@@ -26,34 +25,28 @@ pub struct VvcmFk {
 
 #[wasm_bindgen]
 impl VvcmFk {
-    /// Creates a new FK solver.
+    /// Creates a new FK solver from a row-major `Float32Array` sheet.
     #[wasm_bindgen(constructor)]
-    pub fn new(robot_count: usize, hold_height: Scalar, sheet: JsValue) -> Result<VvcmFk, JsValue> {
-        let sheet = sheet_from_js(sheet)?;
-        let inner = CoreFk::new(robot_count, hold_height, sheet).map_err(core_error_to_js)?;
+    pub fn new(hold_height: Scalar, sheet: Float32Array) -> Result<VvcmFk, JsValue> {
+        let sheet = points_from_float32_array(&sheet, "sheet")?;
+        let inner = CoreFk::new(hold_height, sheet).map_err(core_error_to_js)?;
         Ok(Self { inner })
     }
 
     /// Solves the current robot formation and returns every candidate branch.
     #[wasm_bindgen(js_name = updateStableSolutions)]
-    pub fn update_stable_solutions(&mut self, formation: JsValue) -> Result<JsValue, JsValue> {
-        let formation = formation_from_js(formation)?;
+    pub fn update_stable_solutions(&mut self, formation: Float32Array) -> Result<JsValue, JsValue> {
+        let formation = points_from_float32_array(&formation, "formation")?;
         let solutions = self
             .inner
-            .update_stable_solutions(formation)
+            .update_stable_solutions(&formation)
             .map_err(core_error_to_js)?;
-        to_js_value(&solutions_output(solutions))
+        solutions_to_js(solutions)
     }
 
     /// Returns the cached solutions from the most recent solve.
     pub fn solutions(&self) -> Result<JsValue, JsValue> {
-        to_js_value(&solutions_output(self.inner.solutions()))
-    }
-
-    /// Returns only stable cached solutions from the most recent solve.
-    #[wasm_bindgen(js_name = stableSolutions)]
-    pub fn stable_solutions(&self) -> Result<JsValue, JsValue> {
-        to_js_value(&stable_solutions_output(self.inner.solutions()))
+        solutions_to_js(self.inner.solutions())
     }
 
     /// Returns the fixed robot count.
@@ -77,36 +70,28 @@ pub struct VvcmSimulation {
 
 #[wasm_bindgen]
 impl VvcmSimulation {
-    /// Creates a simulation from an initial formation and object pose.
+    /// Creates a simulation from typed-array inputs.
     #[wasm_bindgen(constructor)]
     pub fn new(
-        robot_count: usize,
         hold_height: Scalar,
-        sheet: JsValue,
-        initial_formation: JsValue,
-        po_initial: JsValue,
+        sheet: Float32Array,
+        initial_formation: Float32Array,
+        po_initial: Float32Array,
         dt: Scalar,
     ) -> Result<VvcmSimulation, JsValue> {
-        let sheet = sheet_from_js(sheet)?;
-        let initial_formation = formation_from_js(initial_formation)?;
-        let po_initial = point3_from_js(po_initial)?;
-        let inner = CoreSimulation::new(
-            robot_count,
-            hold_height,
-            sheet,
-            initial_formation,
-            po_initial,
-            dt,
-        )
-        .map_err(core_error_to_js)?;
+        let sheet = points_from_float32_array(&sheet, "sheet")?;
+        let initial_formation = points_from_float32_array(&initial_formation, "initialFormation")?;
+        let po_initial = point3_from_float32_array(&po_initial, "poInitial")?;
+        let inner = CoreSimulation::new(hold_height, sheet, &initial_formation, po_initial, dt)
+            .map_err(core_error_to_js)?;
         Ok(Self { inner })
     }
 
     /// Sets one XY velocity vector per robot.
     #[wasm_bindgen(js_name = setVelocity)]
-    pub fn set_velocity(&mut self, velocity: JsValue) -> Result<(), JsValue> {
-        let velocity = formation_from_js(velocity)?;
-        self.inner.set_velocity(velocity).map_err(core_error_to_js)
+    pub fn set_velocity(&mut self, velocity: Float32Array) -> Result<(), JsValue> {
+        let velocity = vectors_from_float32_array(&velocity, "velocity")?;
+        self.inner.set_velocity(&velocity).map_err(core_error_to_js)
     }
 
     /// Advances the simulation by one fixed time step.
@@ -116,38 +101,37 @@ impl VvcmSimulation {
 
     /// Returns the current robot formation in absolute coordinates.
     #[wasm_bindgen(js_name = absoluteFormation)]
-    pub fn absolute_formation(&self) -> Result<JsValue, JsValue> {
-        let formation = self.inner.absolute_formation();
-        to_js_value(&formation_output(&formation))
+    pub fn absolute_formation(&self) -> Float32Array {
+        point_slice_to_float32_array(self.inner.absolute_formation())
     }
 
     /// Returns the selected object position in absolute coordinates.
     #[wasm_bindgen(js_name = absoluteObjectPosition)]
-    pub fn absolute_object_position(&self) -> Result<JsValue, JsValue> {
-        to_js_value(&Point3Output::from(self.inner.absolute_object_position()))
+    pub fn absolute_object_position(&self) -> Float32Array {
+        point3_to_float32_array(self.inner.absolute_object_position())
     }
 
     /// Returns the local-frame origin in absolute coordinates.
     #[wasm_bindgen(js_name = globalPosition)]
-    pub fn global_position(&self) -> Result<JsValue, JsValue> {
-        to_js_value(&Point2Output::from(self.inner.global_position()))
+    pub fn global_position(&self) -> Float32Array {
+        point2_to_float32_array(self.inner.global_position())
     }
 
     /// Returns the robot formation in the simulation-local frame.
-    pub fn formation(&self) -> Result<JsValue, JsValue> {
-        to_js_value(&formation_output(self.inner.formation()))
+    pub fn formation(&self) -> Float32Array {
+        point_slice_to_float32_array(self.inner.formation())
     }
 
     /// Returns the selected object position in the simulation-local frame.
     #[wasm_bindgen(js_name = objectPosition)]
-    pub fn object_position(&self) -> Result<JsValue, JsValue> {
-        to_js_value(&Point3Output::from(self.inner.object_position()))
+    pub fn object_position(&self) -> Float32Array {
+        point3_to_float32_array(self.inner.object_position())
     }
 
     /// Returns the taut cable indices for the selected branch.
     #[wasm_bindgen(js_name = tautCables)]
-    pub fn taut_cables(&self) -> Result<JsValue, JsValue> {
-        to_js_value(&self.inner.taut_cables().to_vec())
+    pub fn taut_cables(&self) -> Uint32Array {
+        usize_slice_to_uint32_array(self.inner.taut_cables())
     }
 
     /// Returns the selected solution index, or `null` when none is selected.
@@ -162,13 +146,13 @@ impl VvcmSimulation {
     }
 
     /// Returns the current per-robot velocity vectors.
-    pub fn velocity(&self) -> Result<JsValue, JsValue> {
-        to_js_value(&formation_output(self.inner.velocity()))
+    pub fn velocity(&self) -> Float32Array {
+        vector_slice_to_float32_array(self.inner.velocity())
     }
 
     /// Returns the cached FK solutions from the underlying solver.
     pub fn solutions(&self) -> Result<JsValue, JsValue> {
-        to_js_value(&solutions_output(self.inner.fk_engine().solutions()))
+        solutions_to_js(self.inner.fk_engine().solutions())
     }
 }
 
@@ -182,43 +166,45 @@ pub struct VvcmManualSimulation {
 impl VvcmManualSimulation {
     /// Creates a manual simulation wrapper for a fixed sheet.
     #[wasm_bindgen(constructor)]
-    pub fn new(
-        robot_count: usize,
-        hold_height: Scalar,
-        sheet: JsValue,
-    ) -> Result<VvcmManualSimulation, JsValue> {
-        let sheet = sheet_from_js(sheet)?;
-        let inner =
-            CoreManualSimulation::new(robot_count, hold_height, sheet).map_err(core_error_to_js)?;
+    pub fn new(hold_height: Scalar, sheet: Float32Array) -> Result<VvcmManualSimulation, JsValue> {
+        let sheet = points_from_float32_array(&sheet, "sheet")?;
+        let inner = CoreManualSimulation::new(hold_height, sheet).map_err(core_error_to_js)?;
         Ok(Self { inner })
     }
 
     /// Initializes the wrapper and returns the selected absolute object pose.
-    pub fn init(&mut self, formation: JsValue, po_initial: JsValue) -> Result<JsValue, JsValue> {
-        let formation = formation_from_js(formation)?;
-        let po_initial = point3_from_js(po_initial)?;
+    pub fn init(
+        &mut self,
+        formation: Float32Array,
+        po_initial: Float32Array,
+    ) -> Result<Float32Array, JsValue> {
+        let formation = points_from_float32_array(&formation, "formation")?;
+        let po_initial = point3_from_float32_array(&po_initial, "poInitial")?;
         let point = self
             .inner
-            .init(formation, po_initial)
+            .init(&formation, po_initial)
             .map_err(core_error_to_js)?;
-        to_js_value(&Point3Output::from(point))
+        Ok(point3_to_float32_array(point))
     }
 
     /// Updates the wrapper from a new formation and returns the selected pose.
     #[wasm_bindgen(js_name = getNewStableSolution)]
-    pub fn get_new_stable_solution(&mut self, formation: JsValue) -> Result<JsValue, JsValue> {
-        let formation = formation_from_js(formation)?;
+    pub fn get_new_stable_solution(
+        &mut self,
+        formation: Float32Array,
+    ) -> Result<Float32Array, JsValue> {
+        let formation = points_from_float32_array(&formation, "formation")?;
         let point = self
             .inner
-            .get_new_stable_solution(formation)
+            .get_new_stable_solution(&formation)
             .map_err(core_error_to_js)?;
-        to_js_value(&Point3Output::from(point))
+        Ok(point3_to_float32_array(point))
     }
 
     /// Returns the local-frame origin in absolute coordinates.
     #[wasm_bindgen(js_name = globalPosition)]
-    pub fn global_position(&self) -> Result<JsValue, JsValue> {
-        to_js_value(&Point2Output::from(self.inner.global_position()))
+    pub fn global_position(&self) -> Float32Array {
+        point2_to_float32_array(self.inner.global_position())
     }
 
     /// Returns whether the wrapper has been initialized with a formation.
@@ -228,29 +214,28 @@ impl VvcmManualSimulation {
     }
 
     /// Returns the current formation in the centroid-relative local frame.
-    pub fn formation(&self) -> Result<JsValue, JsValue> {
-        match self.inner.formation() {
-            Some(formation) => to_js_value(&formation_output(formation)),
-            None => Ok(JsValue::NULL),
-        }
+    pub fn formation(&self) -> JsValue {
+        self.inner.formation().map_or(JsValue::NULL, |formation| {
+            point_slice_to_float32_array(formation).into()
+        })
     }
 
     /// Returns the selected object position in the local frame.
     #[wasm_bindgen(js_name = objectPosition)]
-    pub fn object_position(&self) -> Result<JsValue, JsValue> {
+    pub fn object_position(&self) -> JsValue {
         optional_point3_to_js(self.inner.object_position())
     }
 
     /// Returns the selected object position in absolute coordinates.
     #[wasm_bindgen(js_name = absoluteObjectPosition)]
-    pub fn absolute_object_position(&self) -> Result<JsValue, JsValue> {
+    pub fn absolute_object_position(&self) -> JsValue {
         optional_point3_to_js(self.inner.absolute_object_position())
     }
 
     /// Returns the taut cable indices for the selected branch.
     #[wasm_bindgen(js_name = tautCables)]
-    pub fn taut_cables(&self) -> Result<JsValue, JsValue> {
-        to_js_value(&self.inner.taut_cables().to_vec())
+    pub fn taut_cables(&self) -> Uint32Array {
+        usize_slice_to_uint32_array(self.inner.taut_cables())
     }
 
     /// Returns the selected solution index, or `null` when none is selected.
@@ -261,164 +246,164 @@ impl VvcmManualSimulation {
 
     /// Returns the cached FK solutions from the underlying solver.
     pub fn solutions(&self) -> Result<JsValue, JsValue> {
-        to_js_value(&solutions_output(self.inner.fk_engine().solutions()))
+        solutions_to_js(self.inner.fk_engine().solutions())
     }
 }
 
-#[derive(Debug, Clone, Copy, Deserialize)]
-#[serde(untagged)]
-enum Point2Input {
-    Tuple([Scalar; 2]),
-    Object { x: Scalar, y: Scalar },
-}
-
-impl From<Point2Input> for Point2 {
-    fn from(value: Point2Input) -> Self {
-        match value {
-            Point2Input::Tuple([x, y]) | Point2Input::Object { x, y } => Point2::new(x, y),
-        }
+fn points_from_float32_array(
+    array: &Float32Array,
+    context: &'static str,
+) -> Result<Vec<Point2>, JsValue> {
+    let values = array.to_vec();
+    if values.len() % 2 != 0 {
+        return Err(invalid_argument_error(format!(
+            "{context} length must be divisible by 2"
+        )));
     }
+
+    Ok(values
+        .chunks_exact(2)
+        .map(|row| Point2::new(row[0], row[1]))
+        .collect())
 }
 
-#[derive(Debug, Clone, Copy, Deserialize)]
-#[serde(untagged)]
-enum Point3Input {
-    Tuple([Scalar; 3]),
-    Object { x: Scalar, y: Scalar, z: Scalar },
-}
-
-impl From<Point3Input> for Point3 {
-    fn from(value: Point3Input) -> Self {
-        match value {
-            Point3Input::Tuple([x, y, z]) | Point3Input::Object { x, y, z } => Point3::new(x, y, z),
-        }
+fn vectors_from_float32_array(
+    array: &Float32Array,
+    context: &'static str,
+) -> Result<Vec<Vector2>, JsValue> {
+    let values = array.to_vec();
+    if values.len() % 2 != 0 {
+        return Err(invalid_argument_error(format!(
+            "{context} length must be divisible by 2"
+        )));
     }
+
+    Ok(values
+        .chunks_exact(2)
+        .map(|row| Vector2::new(row[0], row[1]))
+        .collect())
 }
 
-#[derive(Debug, Clone, Copy, Serialize)]
-struct Point2Output {
-    x: Scalar,
-    y: Scalar,
-}
-
-impl From<Point2> for Point2Output {
-    fn from(value: Point2) -> Self {
-        Self {
-            x: value.x,
-            y: value.y,
-        }
+fn point3_from_float32_array(
+    array: &Float32Array,
+    context: &'static str,
+) -> Result<Point3, JsValue> {
+    let values = array.to_vec();
+    if values.len() != 3 {
+        return Err(invalid_argument_error(format!(
+            "{context} length must be exactly 3"
+        )));
     }
+
+    Ok(Point3::new(values[0], values[1], values[2]))
 }
 
-#[derive(Debug, Clone, Copy, Serialize)]
-struct Point3Output {
-    x: Scalar,
-    y: Scalar,
-    z: Scalar,
-}
-
-impl From<Point3> for Point3Output {
-    fn from(value: Point3) -> Self {
-        Self {
-            x: value.x,
-            y: value.y,
-            z: value.z,
-        }
+fn solutions_to_js(solutions: &FkSolutions) -> Result<JsValue, JsValue> {
+    let solution_values = Array::new();
+    for solution in solutions.iter() {
+        let item = Object::new();
+        set_property(&item, "stable", JsValue::from_bool(solution.stable))?;
+        set_property(&item, "po", point3_to_object(solution.po).into())?;
+        set_property(&item, "vo", point2_to_object(solution.vo).into())?;
+        set_property(
+            &item,
+            "tautCables",
+            usize_slice_to_array(&solution.taut_cables).into(),
+        )?;
+        set_property(
+            &item,
+            "lambdaValues",
+            scalar_slice_to_array(&solution.lambda_values).into(),
+        )?;
+        solution_values.push(&item);
     }
+
+    let object = Object::new();
+    set_property(&object, "solutions", solution_values.into())?;
+    set_property(
+        &object,
+        "allCount",
+        JsValue::from_f64(solutions.all_count() as f64),
+    )?;
+    set_property(
+        &object,
+        "stableCount",
+        JsValue::from_f64(solutions.stable_count() as f64),
+    )?;
+
+    Ok(object.into())
 }
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct FkSolutionOutput {
-    stable: bool,
-    po: Point3Output,
-    vo: Point2Output,
-    taut_cables: Vec<usize>,
-    lambda_values: Vec<Scalar>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct FkSolutionsOutput {
-    solutions: Vec<FkSolutionOutput>,
-    all_count: usize,
-    stable_count: usize,
-}
-
-fn point2_list_from_js(value: JsValue, context: &'static str) -> Result<Vec<Point2>, JsValue> {
-    let inputs: Vec<Point2Input> = serde_wasm_bindgen::from_value(value).map_err(|error| {
-        invalid_argument_error(format!(
-            "invalid {context}: expected an array of [x, y] tuples or {{ x, y }} objects ({error})"
-        ))
-    })?;
-
-    Ok(inputs.into_iter().map(Point2::from).collect())
-}
-
-fn point3_from_js(value: JsValue) -> Result<Point3, JsValue> {
-    let input: Point3Input = serde_wasm_bindgen::from_value(value).map_err(|error| {
-        invalid_argument_error(format!(
-            "invalid point3: expected [x, y, z] or {{ x, y, z }} ({error})"
-        ))
-    })?;
-
-    Ok(Point3::from(input))
-}
-
-fn formation_from_js(value: JsValue) -> Result<RobotFormation, JsValue> {
-    RobotFormation::new(point2_list_from_js(value, "robot formation")?).map_err(core_error_to_js)
-}
-
-fn sheet_from_js(value: JsValue) -> Result<SheetShape, JsValue> {
-    SheetShape::new(point2_list_from_js(value, "sheet shape")?).map_err(core_error_to_js)
-}
-
-fn formation_output(formation: &RobotFormation) -> Vec<Point2Output> {
-    formation
-        .points()
-        .iter()
-        .copied()
-        .map(Point2Output::from)
-        .collect()
-}
-
-fn solution_output(solution: &FkSolution) -> FkSolutionOutput {
-    FkSolutionOutput {
-        stable: solution.stable,
-        po: Point3Output::from(solution.po),
-        vo: Point2Output::from(solution.vo),
-        taut_cables: solution.taut_cables.clone(),
-        lambda_values: solution.lambda_values.clone(),
+fn point_slice_to_float32_array(points: &[Point2]) -> Float32Array {
+    let mut values = Vec::with_capacity(points.len() * 2);
+    for point in points {
+        values.extend_from_slice(&[point.x, point.y]);
     }
+    Float32Array::from(values.as_slice())
 }
 
-fn solutions_output(solutions: &FkSolutions) -> FkSolutionsOutput {
-    FkSolutionsOutput {
-        solutions: solutions.iter().map(solution_output).collect(),
-        all_count: solutions.all_count(),
-        stable_count: solutions.stable_count(),
+fn vector_slice_to_float32_array(vectors: &[Vector2]) -> Float32Array {
+    let mut values = Vec::with_capacity(vectors.len() * 2);
+    for vector in vectors {
+        values.extend_from_slice(&[vector.x, vector.y]);
     }
+    Float32Array::from(values.as_slice())
 }
 
-fn stable_solutions_output(solutions: &FkSolutions) -> Vec<FkSolutionOutput> {
-    solutions.stable().map(solution_output).collect()
+fn point2_to_float32_array(point: Point2) -> Float32Array {
+    Float32Array::from([point.x, point.y].as_slice())
+}
+
+fn point3_to_float32_array(point: Point3) -> Float32Array {
+    Float32Array::from([point.x, point.y, point.z].as_slice())
+}
+
+fn point2_to_object(point: Point2) -> Object {
+    let object = Object::new();
+    let _ = set_property(&object, "x", JsValue::from_f64(point.x as f64));
+    let _ = set_property(&object, "y", JsValue::from_f64(point.y as f64));
+    object
+}
+
+fn point3_to_object(point: Point3) -> Object {
+    let object = Object::new();
+    let _ = set_property(&object, "x", JsValue::from_f64(point.x as f64));
+    let _ = set_property(&object, "y", JsValue::from_f64(point.y as f64));
+    let _ = set_property(&object, "z", JsValue::from_f64(point.z as f64));
+    object
+}
+
+fn usize_slice_to_array(values: &[usize]) -> Array {
+    let array = Array::new();
+    for value in values {
+        array.push(&JsValue::from_f64(*value as f64));
+    }
+    array
+}
+
+fn scalar_slice_to_array(values: &[Scalar]) -> Array {
+    let array = Array::new();
+    for value in values {
+        array.push(&JsValue::from_f64(*value as f64));
+    }
+    array
+}
+
+fn usize_slice_to_uint32_array(values: &[usize]) -> Uint32Array {
+    usize_vec_to_uint32_array(values)
+}
+
+fn usize_vec_to_uint32_array(values: &[usize]) -> Uint32Array {
+    let values = values.iter().map(|value| *value as u32).collect::<Vec<_>>();
+    Uint32Array::from(values.as_slice())
 }
 
 fn optional_index_to_js(value: Option<usize>) -> JsValue {
     value.map_or(JsValue::NULL, |index| JsValue::from_f64(index as f64))
 }
 
-fn optional_point3_to_js(value: Option<Point3>) -> Result<JsValue, JsValue> {
-    match value {
-        Some(point) => to_js_value(&Point3Output::from(point)),
-        None => Ok(JsValue::NULL),
-    }
-}
-
-fn to_js_value(value: &impl Serialize) -> Result<JsValue, JsValue> {
-    serde_wasm_bindgen::to_value(value).map_err(|error| {
-        invalid_argument_error(format!("failed to serialize VVCM WASM output: {error}"))
-    })
+fn optional_point3_to_js(value: Option<Point3>) -> JsValue {
+    value.map_or(JsValue::NULL, |point| point3_to_float32_array(point).into())
 }
 
 fn core_error_to_js(error: CoreError) -> JsValue {
@@ -429,9 +414,9 @@ fn core_error_to_js(error: CoreError) -> JsValue {
             actual,
         } => {
             let value = vvcm_error("DIMENSION_MISMATCH", error.to_string());
-            set_property(&value, "context", JsValue::from_str(context));
-            set_property(&value, "expected", JsValue::from_f64(expected as f64));
-            set_property(&value, "actual", JsValue::from_f64(actual as f64));
+            let _ = set_property(&value, "context", JsValue::from_str(context));
+            let _ = set_property(&value, "expected", JsValue::from_f64(expected as f64));
+            let _ = set_property(&value, "actual", JsValue::from_f64(actual as f64));
             value
         }
         CoreError::InfeasibleFormation => vvcm_error("INFEASIBLE_FORMATION", error.to_string()),
@@ -447,11 +432,11 @@ fn invalid_argument_error(message: impl Into<String>) -> JsValue {
 fn vvcm_error(code: &'static str, message: String) -> JsValue {
     let error = js_sys::Error::new(&message);
     let value: JsValue = error.into();
-    set_property(&value, "name", JsValue::from_str("VvcmError"));
-    set_property(&value, "code", JsValue::from_str(code));
+    let _ = set_property(&value, "name", JsValue::from_str("VvcmError"));
+    let _ = set_property(&value, "code", JsValue::from_str(code));
     value
 }
 
-fn set_property(target: &JsValue, key: &str, value: JsValue) {
-    let _ = Reflect::set(target, &JsValue::from_str(key), &value);
+fn set_property(target: &JsValue, key: &str, value: JsValue) -> Result<(), JsValue> {
+    Reflect::set(target, &JsValue::from_str(key), &value).map(|_| ())
 }

@@ -4,34 +4,32 @@
 //! Forward kinematics and simulation utilities for the Virtual Variable Cables
 //! Model (VVCM).
 //!
-//! The crate exposes small domain types such as [`Point2`],
-//! [`RobotFormation`], [`SheetShape`], and [`FkSolution`] while keeping
-//! `nalgebra` as an internal numerical backend. Length values are unitless to
-//! the type system and must be consistent across each solve. The FK engine
-//! normalizes coordinates internally for numerical stability and maps results
-//! back to the caller's coordinate frames.
+//! The crate exposes `nalgebra` point and vector types directly. Length values
+//! are unitless to the type system and must be consistent across each solve.
+//! The FK engine normalizes coordinates internally for numerical stability and
+//! maps results back to the caller's coordinate frames.
 //!
 //! # Basic usage
 //!
 //! ```rust
-//! use vvcm_rs::{Point2, RobotFormation, SheetShape, VvcmFk};
+//! use vvcm_rs::{point2, Point2, VvcmFk};
 //!
-//! let formation = RobotFormation::new(vec![
-//!     Point2::new(213.7, 122.7),
-//!     Point2::new(804.6, 37.2),
-//!     Point2::new(904.0, 550.0),
-//!     Point2::new(439.3, 715.9),
-//! ])?;
+//! let formation: Vec<Point2> = vec![
+//!     point2((213.7, 122.7)),
+//!     point2((804.6, 37.2)),
+//!     point2((904.0, 550.0)),
+//!     point2((439.3, 715.9)),
+//! ];
 //!
-//! let sheet = SheetShape::new(vec![
-//!     Point2::new(-316.1, -421.9),
-//!     Point2::new(803.4, -384.1),
-//!     Point2::new(746.1, 712.8),
-//!     Point2::new(-367.3, 664.2),
-//! ])?;
+//! let sheet: Vec<Point2> = vec![
+//!     point2((-316.1, -421.9)),
+//!     point2((803.4, -384.1)),
+//!     point2((746.1, 712.8)),
+//!     point2((-367.3, 664.2)),
+//! ];
 //!
-//! let mut fk = VvcmFk::new(4, 1000.0, sheet)?;
-//! let solutions = fk.update_stable_solutions(formation)?;
+//! let mut fk = VvcmFk::new(1000.0, sheet)?;
+//! let solutions = fk.update_stable_solutions(&formation)?;
 //!
 //! assert!(solutions.stable_count() > 0);
 //! # Ok::<(), vvcm_rs::VvcmError>(())
@@ -57,4 +55,8 @@ pub use error::VvcmError;
 pub use fk::VvcmFk;
 pub use manual_simulation::VvcmManualSimulation;
 pub use simulation::VvcmSimulation;
-pub use types::{FkSolution, FkSolutions, Point2, Point3, RobotFormation, Scalar, SheetShape};
+pub use types::{
+    FkSolution, FkSolutions, IntoPoint2, IntoPoint3, Point2, Point3, Scalar, Vector2, Vector3,
+    distance2, distance3, point2, point2_zero, point3, point3_zero, relative_xy_to,
+    translated_xy_by,
+};

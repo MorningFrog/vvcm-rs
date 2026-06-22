@@ -1,18 +1,13 @@
-import math
-
 import numpy as np
 import pytest
 
 from vvcm_rs import (
     DimensionMismatchError,
     FkSolution,
+    FkSolutions,
     InfeasibleFormationError,
     NoSolutionError,
     NoStableSolutionError,
-    Point2,
-    Point3,
-    RobotFormation,
-    SheetShape,
     VVCM_FK,
     VvcmError,
     VvcmFk,
@@ -22,100 +17,101 @@ from vvcm_rs import (
 
 
 def test_fk_sample_accepts_numpy_arrays_and_returns_stable_solutions():
-    # NumPy arrays should flow through the Python wrapper without extra conversion helpers.
-    fk = VvcmFk(4, 1000.0, readme_sheet_array())
+    fk = VvcmFk(1000.0, readme_sheet_array())
 
-    # Solve the README sample and inspect the stable branches it returns.
     solutions = fk.update_stable_solutions(readme_formation_array())
 
+    assert isinstance(solutions, FkSolutions)
     assert solutions.all_count() == 3
     assert solutions.stable_count() == 2
-    # The known stable branches should match the reference pose values.
-    stable = solutions.stable()
-    assert_point3_close(stable[0].po, Point3(568.8123, 324.72644, 336.73608), 0.05)
-    assert_point2_close(stable[0].vo, Point2(238.6181, 125.02439), 0.05)
-    assert stable[0].taut_cables == [0, 1, 2]
-    assert len(stable[0].lambda_values) == len(stable[0].taut_cables)
-    assert all(math.isfinite(value) for value in stable[0].lambda_values)
-    assert all(value >= -1.0e-4 for value in stable[0].lambda_values)
-    assert_point3_close(stable[1].po, Point3(557.9307, 341.23087, 337.2464), 0.05)
-    assert_point2_close(stable[1].vo, Point2(208.79898, 152.53357), 0.05)
-    assert stable[1].taut_cables == [0, 2, 3]
-    assert len(stable[1].lambda_values) == len(stable[1].taut_cables)
-    assert all(math.isfinite(value) for value in stable[1].lambda_values)
-    assert all(value >= -1.0e-4 for value in stable[1].lambda_values)
+    assert len(solutions.solutions) == 3
+    assert [solution.stable for solution in solutions.solutions] == [True, True, False]
 
-    # The nearest-stable helper should pick the branch closest to the query point.
-    closest_index, closest = solutions.closest_stable_to((560.0, 340.0, 337.0))
-    assert closest_index == 1
-    assert closest.stable is True
+    stable_solutions = solutions.stable()
+    assert len(stable_solutions) == 2
+    assert all(isinstance(solution, FkSolution) for solution in stable_solutions)
+
+    first = stable_solutions[0]
+    assert_point3_close(first.po, np.array([568.8123, 324.72644, 336.73608], dtype=np.float32), 0.05)
+    assert_point2_close(first.vo, np.array([238.6181, 125.02439], dtype=np.float32), 0.05)
+    assert first.taut_cables.tolist() == [0, 1, 2]
+    assert len(first.lambda_values) == len(first.taut_cables)
+    assert np.all(np.isfinite(first.lambda_values))
+    assert np.all(first.lambda_values >= -1.0e-4)
+
+    second = stable_solutions[1]
+    assert_point3_close(second.po, np.array([557.9307, 341.23087, 337.2464], dtype=np.float32), 0.05)
+    assert_point2_close(second.vo, np.array([208.79898, 152.53357], dtype=np.float32), 0.05)
+    assert second.taut_cables.tolist() == [0, 2, 3]
+    assert np.all(second.lambda_values >= -1.0e-4)
+
+    assert solutions.closest_stable_to(np.array([560.0, 340.0, 337.0], dtype=np.float32)) == 1
 
 
-def test_domain_types_accept_lists_and_point_instances():
-    # The Python API should accept both Point2 instances and plain tuple rows.
-    formation = RobotFormation([Point2(1.0, 2.0), (3.0, 4.0)])
+def test_empty_solution_collection_exposes_solution_list():
+    solutions = FkSolutions()
 
-    assert len(formation) == 2
-    assert formation[0].as_tuple() == (1.0, 2.0)
-    assert formation.as_tuples() == [(1.0, 2.0), (3.0, 4.0)]
-    assert_point2_close(formation.centroid(), Point2(2.0, 3.0), 1.0e-6)
-
-    relative = formation.relative_to(Point2(1.0, 1.0))
-    assert relative.as_tuples() == [(0.0, 1.0), (2.0, 3.0)]
-
-    sheet = SheetShape([Point2(0.0, 0.0), Point2(1.0, 0.0), Point2(0.0, 1.0)])
-    assert len(sheet) == 3
-    assert sheet.vertices[2].as_tuple() == (0.0, 1.0)
-
-    solution = FkSolution(True, (1.0, 2.0, 3.0), (4.0, 5.0), [0, 2], [0.25, 0.75])
-    assert solution.lambda_values == [0.25, 0.75]
-    solution.lambda_values = [0.5, 0.5]
-    assert solution.lambda_values == [0.5, 0.5]
+    assert solutions.is_empty()
+    assert solutions.all_count() == 0
+    assert solutions.stable_count() == 0
+    assert solutions.solutions == []
+    assert solutions.stable() == []
+    assert solutions.closest_stable_to(np.zeros(3, dtype=np.float32)) is None
 
 
 def test_aliases_match_cpp_style_class_names():
-    # Keep the C++-style alias for compatibility with downstream code.
     assert VVCM_FK is VvcmFk
 
 
 def test_errors_are_mapped_to_python_exception():
-    # Dimension mismatches should raise a typed exception that still derives from VvcmError.
-    fk = VvcmFk(4, 1000.0, readme_sheet_array())
+    fk = VvcmFk(1000.0, readme_sheet_array())
 
     with pytest.raises(DimensionMismatchError, match="dimension mismatch") as caught:
-        fk.update_stable_solutions([(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)])
+        fk.update_stable_solutions(
+            np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]], dtype=np.float32)
+        )
     assert isinstance(caught.value, VvcmError)
 
 
+def test_invalid_numpy_shapes_are_rejected():
+    with pytest.raises(ValueError, match="sheet must have shape"):
+        VvcmFk(1000.0, np.zeros((4, 3), dtype=np.float32))
+
+    fk = VvcmFk(1000.0, readme_sheet_array())
+    with pytest.raises(TypeError, match="formation must be C-contiguous"):
+        fk.update_stable_solutions(readme_formation_array()[::2])
+
+
 def test_infeasible_formation_maps_to_python_exception_subclass():
-    # A stretched formation outside the sheet should be identifiable without parsing the message.
     fk = VvcmFk(
-        4,
         10.0,
-        [
-            (0.0, 0.0),
-            (1.0, 0.0),
-            (1.0, 1.0),
-            (0.0, 1.0),
-        ],
+        np.array(
+            [
+                [0.0, 0.0],
+                [1.0, 0.0],
+                [1.0, 1.0],
+                [0.0, 1.0],
+            ],
+            dtype=np.float32,
+        ),
     )
 
-    with pytest.raises(
-        InfeasibleFormationError, match="robot formation is infeasible"
-    ) as caught:
+    with pytest.raises(InfeasibleFormationError, match="robot formation is infeasible") as caught:
         fk.update_stable_solutions(
-            [
-                (0.0, 0.0),
-                (2.0, 0.0),
-                (2.0, 2.0),
-                (0.0, 2.0),
-            ]
+            np.array(
+                [
+                    [0.0, 0.0],
+                    [2.0, 0.0],
+                    [2.0, 2.0],
+                    [0.0, 2.0],
+                ],
+                dtype=np.float32,
+            )
         )
     assert isinstance(caught.value, VvcmError)
 
 
 def test_all_typed_error_classes_derive_from_vvcm_error():
-    # Keep the published exception hierarchy explicit for downstream handlers.
     assert issubclass(DimensionMismatchError, VvcmError)
     assert issubclass(InfeasibleFormationError, VvcmError)
     assert issubclass(NoSolutionError, VvcmError)
@@ -123,74 +119,68 @@ def test_all_typed_error_classes_derive_from_vvcm_error():
 
 
 def test_manual_simulation_returns_expected_branch():
-    # Manual simulation mirrors the Rust smoke test on the shared six-robot fixture.
-    simulation = VvcmManualSimulation(6, 823.0, six_robot_sheet())
+    simulation = VvcmManualSimulation(823.0, six_robot_sheet())
 
-    # Initialize at the world origin to select the same stable branch as the Rust test.
-    po = simulation.init(six_robot_formation(), Point3.zero())
+    po = simulation.init(six_robot_formation(), np.zeros(3, dtype=np.float32))
 
-    assert_point3_close(po, Point3(110.255, 244.585, 301.218), 0.2)
+    assert_point3_close(po, np.array([110.255, 244.585, 301.218], dtype=np.float32), 0.2)
     assert_point3_close(
         simulation.absolute_object_position,
-        Point3(110.255, 244.585, 301.218),
+        np.array([110.255, 244.585, 301.218], dtype=np.float32),
         0.2,
     )
     assert simulation.solution_index is not None
-    assert len(simulation.taut_cables) > 0
+    assert simulation.taut_cables.size > 0
+    assert simulation.formation.shape == (6, 2)
 
-    # Re-solving the same formation should keep the same stable branch.
     po = simulation.get_new_stable_solution(six_robot_formation())
-    assert_point3_close(po, Point3(110.255, 244.585, 301.218), 0.2)
+    assert_point3_close(po, np.array([110.255, 244.585, 301.218], dtype=np.float32), 0.2)
 
 
 def test_velocity_simulation_steps_consistently():
-    # The velocity-driven wrapper should preserve the initial branch and step consistently.
     simulation = VvcmSimulation(
-        6,
         823.0,
         six_robot_sheet(),
         six_robot_formation(),
-        Point3.zero(),
+        np.zeros(3, dtype=np.float32),
         1.0 / 30.0,
     )
 
-    # The local formation is expressed relative to the first robot, so the first point becomes the origin.
-    assert_point2_close(simulation.global_position, Point2(-27.419184, -176.293854), 0.001)
-    assert_point2_close(simulation.formation[0], Point2.zero(), 0.001)
-    assert_point3_close(simulation.object_position, Point3(137.674, 420.879, 301.218), 0.2)
+    assert_point2_close(simulation.global_position, np.array([-27.419184, -176.293854], dtype=np.float32), 0.001)
+    assert_point2_close(simulation.formation[0], np.array([0.0, 0.0], dtype=np.float32), 0.001)
+    assert_point3_close(simulation.object_position, np.array([137.674, 420.879, 301.218], dtype=np.float32), 0.2)
     assert_point3_close(
         simulation.absolute_object_position(),
-        Point3(110.255, 244.585, 301.218),
+        np.array([110.255, 244.585, 301.218], dtype=np.float32),
         0.2,
     )
 
-    before_zero_step = simulation.object_position.as_tuple()
-    # A zero-velocity step should not move the object.
+    before_zero_step = simulation.object_position.copy()
     simulation.step()
-    assert simulation.object_position.as_tuple() == before_zero_step
+    np.testing.assert_array_equal(simulation.object_position, before_zero_step)
 
-    # Apply a small velocity to the first robot and step once more.
     simulation.set_velocity(
-        [
-            (5.0, 5.0),
-            (0.0, 0.0),
-            (0.0, 0.0),
-            (0.0, 0.0),
-            (0.0, 0.0),
-            (0.0, 0.0),
-        ]
+        np.array(
+            [
+                [5.0, 5.0],
+                [0.0, 0.0],
+                [0.0, 0.0],
+                [0.0, 0.0],
+                [0.0, 0.0],
+                [0.0, 0.0],
+            ],
+            dtype=np.float32,
+        )
     )
     simulation.step()
 
-    # Confirm the frame and object pose advance consistently after the update.
-    assert_point2_close(simulation.global_position, Point2(-27.252517, -176.12718), 0.01)
-    assert_point2_close(simulation.formation[0], Point2.zero(), 0.001)
-    assert_point2_close(simulation.formation[1], Point2(425.394, 140.937), 0.02)
-    assert_point3_close(simulation.object_position, Point3(137.54, 420.572, 301.209), 0.25)
+    assert_point2_close(simulation.global_position, np.array([-27.252517, -176.12718], dtype=np.float32), 0.01)
+    assert_point2_close(simulation.formation[0], np.array([0.0, 0.0], dtype=np.float32), 0.001)
+    assert_point2_close(simulation.formation[1], np.array([425.394, 140.937], dtype=np.float32), 0.02)
+    assert_point3_close(simulation.object_position, np.array([137.54, 420.572, 301.209], dtype=np.float32), 0.25)
 
 
 def readme_formation_array():
-    # Keep this fixture identical to the README usage snippet; each row is a robot node position on the world-coordinate XY plane.
     return np.array(
         [
             [213.7, 122.7],
@@ -203,7 +193,6 @@ def readme_formation_array():
 
 
 def readme_sheet_array():
-    # Keep this fixture identical to the README usage snippet; each row is a vertex in the sheet's local coordinate frame.
     return np.array(
         [
             [-316.1, -421.9],
@@ -216,45 +205,36 @@ def readme_sheet_array():
 
 
 def six_robot_formation():
-    # Shared six-robot fixture: each row is a robot node position on the world-coordinate XY plane.
-    return [
-        (-27.419184, -176.293854),
-        (398.141083, -35.190411),
-        (517.018127, 338.271301),
-        (285.155762, 609.95575),
-        (-175.608231, 569.463562),
-        (-301.437988, 194.695297),
-    ]
+    return np.array(
+        [
+            [-27.419184, -176.293854],
+            [398.141083, -35.190411],
+            [517.018127, 338.271301],
+            [285.155762, 609.95575],
+            [-175.608231, 569.463562],
+            [-301.437988, 194.695297],
+        ],
+        dtype=np.float32,
+    )
 
 
 def six_robot_sheet():
-    # Matching unfolded-sheet fixture: each row is a vertex in the sheet's local coordinate frame.
-    return [
-        (-131.665741, -376.508026),
-        (480.675873, -388.066681),
-        (877.700256, 217.088806),
-        (562.778748, 826.754089),
-        (-107.442101, 918.166626),
-        (-453.516937, 284.887146),
-    ]
+    return np.array(
+        [
+            [-131.665741, -376.508026],
+            [480.675873, -388.066681],
+            [877.700256, 217.088806],
+            [562.778748, 826.754089],
+            [-107.442101, 918.166626],
+            [-453.516937, 284.887146],
+        ],
+        dtype=np.float32,
+    )
 
 
 def assert_point2_close(actual, expected, tolerance):
-    # Compare each axis with a tolerance because the Python API uses floating-point values.
-    assert math.isclose(actual.x, expected.x, abs_tol=tolerance), (
-        actual.x,
-        expected.x,
-    )
-    assert math.isclose(actual.y, expected.y, abs_tol=tolerance), (
-        actual.y,
-        expected.y,
-    )
+    np.testing.assert_allclose(actual[:2], expected[:2], atol=tolerance, rtol=0.0)
 
 
 def assert_point3_close(actual, expected, tolerance):
-    # Reuse the 2D helper for x/y and compare z separately.
-    assert_point2_close(actual, expected, tolerance)
-    assert math.isclose(actual.z, expected.z, abs_tol=tolerance), (
-        actual.z,
-        expected.z,
-    )
+    np.testing.assert_allclose(actual[:3], expected[:3], atol=tolerance, rtol=0.0)

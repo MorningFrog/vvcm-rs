@@ -5,7 +5,7 @@
 
 #include <cmath>
 #include <cstddef>
-#include <cstdlib>
+#include <cstdint>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -16,33 +16,21 @@ namespace vvcm_rs
     class Error : public std::runtime_error
     {
     public:
-        explicit Error(const std::string &message) : std::runtime_error(message), code_(VVCM_RS_ERROR_INVALID_ARGUMENT) {}
+        Error(VvcmRsErrorCode code, const char *message)
+            : std::runtime_error(message == nullptr ? "vvcm-rs error" : message), code_(code) {}
 
-        Error(VvcmRsErrorCode code, const std::string &message) : std::runtime_error(message), code_(code) {}
-
-        VvcmRsErrorCode code() const noexcept
-        {
-            return code_;
-        }
+        VvcmRsErrorCode code() const noexcept { return code_; }
 
     private:
         VvcmRsErrorCode code_;
     };
 
-    inline void throw_on_error(VvcmRsErrorCode code)
+    inline void check(VvcmRsErrorCode code)
     {
-        if (code == VVCM_RS_ERROR_OK)
+        if (code != VVCM_RS_ERROR_OK)
         {
-            return;
+            throw Error(code, vvcm_rs_last_error_message());
         }
-
-        const char *message = vvcm_rs_last_error_message();
-        if (message == nullptr || message[0] == '\0')
-        {
-            message = vvcm_rs_error_message(code);
-        }
-
-        throw Error(code, message == nullptr ? "vvcm-rs error" : message);
     }
 
     inline std::string version()
@@ -51,116 +39,83 @@ namespace vvcm_rs
         return value == nullptr ? std::string() : std::string(value);
     }
 
-    struct Point2
+    struct Vec2f
     {
         float x = 0.0f;
         float y = 0.0f;
-
-        Point2() = default;
-        Point2(float x_value, float y_value) : x(x_value), y(y_value) {}
-
-        static Point2 zero()
-        {
-            return Point2();
-        }
-
-        Point2 scaled_by(float factor) const
-        {
-            return Point2(x * factor, y * factor);
-        }
-
-        Point2 translated_by(const Point2 &offset) const
-        {
-            return Point2(x + offset.x, y + offset.y);
-        }
-
-        Point2 relative_to(const Point2 &origin) const
-        {
-            return Point2(x - origin.x, y - origin.y);
-        }
-
-        float distance_to(const Point2 &other) const
-        {
-            const float dx = x - other.x;
-            const float dy = y - other.y;
-            return std::sqrt(dx * dx + dy * dy);
-        }
     };
 
-    inline std::vector<VvcmRsPoint2> to_raw_points(const std::vector<Point2> &points)
-    {
-        std::vector<VvcmRsPoint2> raw;
-        raw.reserve(points.size());
-        for (const auto &point : points)
-        {
-            raw.push_back(VvcmRsPoint2{point.x, point.y});
-        }
-        return raw;
-    }
-
-    struct Point3
+    struct Vec3f
     {
         float x = 0.0f;
         float y = 0.0f;
         float z = 0.0f;
+    };
 
-        Point3() = default;
-        Point3(float x_value, float y_value, float z_value) : x(x_value), y(y_value), z(z_value) {}
+    struct MatrixView2f
+    {
+        const float *data = nullptr;
+        std::size_t rows = 0;
+        std::size_t stride = 2;
 
-        static Point3 zero()
+        MatrixView2f() = default;
+        MatrixView2f(const float *data_value, std::size_t row_count, std::size_t row_stride = 2)
+            : data(data_value), rows(row_count), stride(row_stride) {}
+
+        explicit MatrixView2f(const std::vector<float> &row_major)
+            : data(row_major.empty() ? nullptr : row_major.data()), rows(row_major.size() / 2), stride(2)
         {
-            return Point3();
+            if (row_major.size() % 2 != 0)
+            {
+                throw std::invalid_argument("MatrixView2f row-major data length must be divisible by 2");
+            }
         }
 
-        Point3 translated_xy_by(const Point2 &offset) const
+        VvcmRsMat2f raw() const
         {
-            return Point3(x + offset.x, y + offset.y, z);
+            return VvcmRsMat2f{data, rows, stride};
         }
 
-        Point3 relative_xy_to(const Point2 &origin) const
+        Vec2f row(std::size_t index) const
         {
-            return Point3(x - origin.x, y - origin.y, z);
-        }
-
-        float distance_to(const Point3 &other) const
-        {
-            const float dx = x - other.x;
-            const float dy = y - other.y;
-            const float dz = z - other.z;
-            return std::sqrt(dx * dx + dy * dy + dz * dz);
+            if (index >= rows)
+            {
+                throw std::out_of_range("MatrixView2f row index is out of range");
+            }
+            const std::size_t offset = index * stride;
+            return Vec2f{data[offset], data[offset + 1]};
         }
     };
+
+    inline MatrixView2f matrix_view(const std::vector<float> &row_major)
+    {
+        return MatrixView2f(row_major);
+    }
 
     struct FkSolution
     {
         bool stable = false;
-        Point3 po{};
-        Point2 vo{};
-        std::vector<size_t> taut_cables{};
-        std::vector<float> lambda_values{};
+        Vec3f po{};
+        Vec2f vo{};
+        std::vector<std::size_t> taut_cables;
+        std::vector<float> lambda_values;
     };
 
     class FkSolutions
     {
     public:
+        std::vector<FkSolution> solutions;
+
         FkSolutions() = default;
+        explicit FkSolutions(std::vector<FkSolution> values) : solutions(std::move(values)) {}
 
-        explicit FkSolutions(std::vector<FkSolution> solutions) : solutions_(std::move(solutions)) {}
+        bool is_empty() const { return solutions.empty(); }
+        std::size_t all_count() const { return solutions.size(); }
 
-        bool empty() const
+        std::size_t stable_count() const
         {
-            return solutions_.empty();
-        }
-
-        size_t all_count() const
-        {
-            return solutions_.size();
-        }
-
-        size_t stable_count() const
-        {
-            size_t count = 0;
-            for (const auto &solution : solutions_)
+            std::size_t count = 0;
+            for (const FkSolution &solution : solutions)
             {
                 if (solution.stable)
                 {
@@ -170,45 +125,50 @@ namespace vvcm_rs
             return count;
         }
 
-        const std::vector<FkSolution> &solutions() const
+        const FkSolution &at(std::size_t index) const
         {
-            return solutions_;
+            if (index >= solutions.size())
+            {
+                throw std::out_of_range("solution index is out of range");
+            }
+            return solutions[index];
         }
 
         std::vector<FkSolution> stable() const
         {
-            std::vector<FkSolution> result;
-            for (const auto &solution : solutions_)
+            std::vector<FkSolution> out;
+            for (const FkSolution &solution : solutions)
             {
                 if (solution.stable)
                 {
-                    result.push_back(solution);
+                    out.push_back(solution);
                 }
             }
-            return result;
+            return out;
         }
 
-        std::pair<size_t, FkSolution> closest_stable_to(const Point3 &reference) const
+        std::size_t closest_stable_index(Vec3f reference) const
         {
             bool found = false;
-            size_t best_index = 0;
-            FkSolution best_solution{};
+            std::size_t best_index = 0;
             float best_distance = 0.0f;
 
-            for (size_t index = 0; index < solutions_.size(); ++index)
+            for (std::size_t index = 0; index < solutions.size(); ++index)
             {
-                const auto &solution = solutions_[index];
+                const FkSolution &solution = solutions[index];
                 if (!solution.stable)
                 {
                     continue;
                 }
 
-                const float distance = solution.po.distance_to(reference);
+                const float dx = solution.po.x - reference.x;
+                const float dy = solution.po.y - reference.y;
+                const float dz = solution.po.z - reference.z;
+                const float distance = std::sqrt(dx * dx + dy * dy + dz * dz);
                 if (!found || distance < best_distance)
                 {
                     found = true;
                     best_index = index;
-                    best_solution = solution;
                     best_distance = distance;
                 }
             }
@@ -217,529 +177,379 @@ namespace vvcm_rs
             {
                 throw Error(VVCM_RS_ERROR_NO_STABLE_SOLUTION, "no stable VVCM solution found");
             }
-
-            return std::make_pair(best_index, best_solution);
+            return best_index;
         }
-
-    private:
-        std::vector<FkSolution> solutions_{};
     };
+
+    inline Vec2f vec2_from_raw(VvcmRsPoint2 point)
+    {
+        return Vec2f{point.x, point.y};
+    }
+
+    inline Vec3f vec3_from_raw(VvcmRsPoint3 point)
+    {
+        return Vec3f{point.x, point.y, point.z};
+    }
+
+    template <typename Handle, typename CopyFn>
+    std::vector<std::size_t> read_index_values(Handle *handle, std::size_t index, CopyFn copy_fn)
+    {
+        std::size_t count = 0;
+        check(copy_fn(handle, index, nullptr, &count));
+        std::vector<std::size_t> values(count);
+        std::size_t capacity = count;
+        check(copy_fn(handle, index, values.empty() ? nullptr : values.data(), &capacity));
+        values.resize(capacity);
+        return values;
+    }
+
+    template <typename Handle, typename CopyFn>
+    std::vector<float> read_float_values(Handle *handle, std::size_t index, CopyFn copy_fn)
+    {
+        std::size_t count = 0;
+        check(copy_fn(handle, index, nullptr, &count));
+        std::vector<float> values(count);
+        std::size_t capacity = count;
+        check(copy_fn(handle, index, values.empty() ? nullptr : values.data(), &capacity));
+        values.resize(capacity);
+        return values;
+    }
+
+    template <typename Handle, typename SolutionFn, typename TautFn, typename LambdaFn>
+    FkSolution read_solution(
+        Handle *handle,
+        std::size_t index,
+        SolutionFn solution_fn,
+        TautFn taut_fn,
+        LambdaFn lambda_fn)
+    {
+        VvcmRsFkSolution raw{};
+        check(solution_fn(handle, index, &raw));
+        return FkSolution{
+            raw.stable != 0,
+            vec3_from_raw(raw.po),
+            vec2_from_raw(raw.vo),
+            read_index_values(handle, index, taut_fn),
+            read_float_values(handle, index, lambda_fn),
+        };
+    }
+
+    template <typename Handle, typename CountFn, typename SolutionFn, typename TautFn, typename LambdaFn>
+    FkSolutions read_solutions(
+        Handle *handle,
+        CountFn count_fn,
+        SolutionFn solution_fn,
+        TautFn taut_fn,
+        LambdaFn lambda_fn)
+    {
+        std::size_t count = 0;
+        check(count_fn(handle, &count));
+        std::vector<FkSolution> values;
+        values.reserve(count);
+        for (std::size_t index = 0; index < count; ++index)
+        {
+            values.push_back(read_solution(handle, index, solution_fn, taut_fn, lambda_fn));
+        }
+        return FkSolutions(std::move(values));
+    }
 
     class VvcmFk
     {
     public:
-        VvcmFk(size_t robot_count, float hold_height, const std::vector<Point2> &sheet)
+        VvcmFk(float hold_height, MatrixView2f sheet)
         {
-            std::vector<VvcmRsPoint2> raw_sheet = vvcm_rs::to_raw_points(sheet);
-            throw_on_error(vvcm_rs_fk_new(
-                robot_count,
-                hold_height,
-                raw_sheet.empty() ? nullptr : raw_sheet.data(),
-                raw_sheet.size(),
-                &handle_));
+            check(vvcm_rs_fk_new(hold_height, sheet.raw(), &fk_));
         }
 
         ~VvcmFk()
         {
-            if (handle_ != nullptr)
-            {
-                vvcm_rs_fk_free(handle_);
-            }
+            vvcm_rs_fk_free(fk_);
         }
 
         VvcmFk(const VvcmFk &) = delete;
         VvcmFk &operator=(const VvcmFk &) = delete;
 
-        VvcmFk(VvcmFk &&other) noexcept : handle_(other.handle_)
-        {
-            other.handle_ = nullptr;
-        }
+        VvcmFk(VvcmFk &&other) noexcept : fk_(std::exchange(other.fk_, nullptr)) {}
 
         VvcmFk &operator=(VvcmFk &&other) noexcept
         {
             if (this != &other)
             {
-                if (handle_ != nullptr)
-                {
-                    vvcm_rs_fk_free(handle_);
-                }
-                handle_ = other.handle_;
-                other.handle_ = nullptr;
+                vvcm_rs_fk_free(fk_);
+                fk_ = std::exchange(other.fk_, nullptr);
             }
             return *this;
         }
 
-        FkSolutions update_stable_solutions(const std::vector<Point2> &formation)
+        FkSolutions update_stable_solutions(MatrixView2f formation)
         {
-            std::vector<VvcmRsPoint2> raw_formation = vvcm_rs::to_raw_points(formation);
-            throw_on_error(vvcm_rs_fk_update_stable_solutions(
-                handle_,
-                raw_formation.empty() ? nullptr : raw_formation.data(),
-                raw_formation.size()));
+            check(vvcm_rs_fk_update_stable_solutions(fk_, formation.raw()));
             return solutions();
         }
 
-        size_t robot_count() const
+        std::size_t robot_count() const
         {
-            size_t count = 0;
-            throw_on_error(vvcm_rs_fk_robot_count(handle_, &count));
-            return count;
+            std::size_t value = 0;
+            check(vvcm_rs_fk_robot_count(fk_, &value));
+            return value;
         }
 
         float hold_height() const
         {
-            float hold_height_value = 0.0f;
-            throw_on_error(vvcm_rs_fk_hold_height(handle_, &hold_height_value));
-            return hold_height_value;
+            float value = 0.0f;
+            check(vvcm_rs_fk_hold_height(fk_, &value));
+            return value;
         }
 
-        size_t solution_count() const
+        std::size_t solution_count() const
         {
-            size_t count = 0;
-            throw_on_error(vvcm_rs_fk_solution_count(handle_, &count));
-            return count;
+            std::size_t value = 0;
+            check(vvcm_rs_fk_solution_count(fk_, &value));
+            return value;
         }
 
-        size_t stable_solution_count() const
+        std::size_t stable_solution_count() const
         {
-            size_t count = 0;
-            throw_on_error(vvcm_rs_fk_stable_solution_count(handle_, &count));
-            return count;
+            std::size_t value = 0;
+            check(vvcm_rs_fk_stable_solution_count(fk_, &value));
+            return value;
         }
 
-        FkSolutions solutions() const
+        FkSolutions solutions()
         {
-            const size_t count = solution_count();
-
-            std::vector<FkSolution> solutions;
-            solutions.reserve(count);
-            for (size_t index = 0; index < count; ++index)
-            {
-                VvcmRsFkSolution raw{};
-                throw_on_error(vvcm_rs_fk_solution_at(handle_, index, &raw));
-                solutions.push_back(from_raw(raw));
-            }
-
-            return FkSolutions(std::move(solutions));
+            return read_solutions(
+                fk_,
+                vvcm_rs_fk_solution_count,
+                vvcm_rs_fk_solution_at,
+                vvcm_rs_fk_solution_taut_cables,
+                vvcm_rs_fk_solution_lambda_values);
         }
 
     private:
-        static FkSolution from_raw(const VvcmRsFkSolution &raw)
-        {
-            FkSolution solution;
-            solution.stable = raw.stable != 0;
-            solution.po = Point3(raw.po.x, raw.po.y, raw.po.z);
-            solution.vo = Point2(raw.vo.x, raw.vo.y);
-
-            if (raw.taut_cable_count != 0)
-            {
-                if (raw.taut_cables == nullptr)
-                {
-                    throw Error(VVCM_RS_ERROR_INVALID_ARGUMENT, "malformed taut cable list returned by vvcm-rs");
-                }
-
-                solution.taut_cables.assign(raw.taut_cables, raw.taut_cables + raw.taut_cable_count);
-            }
-
-            if (raw.lambda_value_count != 0)
-            {
-                if (raw.lambda_values == nullptr)
-                {
-                    throw Error(VVCM_RS_ERROR_INVALID_ARGUMENT, "malformed lambda value list returned by vvcm-rs");
-                }
-
-                solution.lambda_values.assign(raw.lambda_values, raw.lambda_values + raw.lambda_value_count);
-            }
-
-            return solution;
-        }
-
-        VvcmRsFk *handle_ = nullptr;
+        VvcmRsFk *fk_ = nullptr;
     };
 
     class VvcmSimulation
     {
     public:
         VvcmSimulation(
-            size_t robot_count,
             float hold_height,
-            const std::vector<Point2> &sheet,
-            const std::vector<Point2> &initial_formation,
-            Point3 po_initial = Point3::zero(),
-            float dt = 1.0f / 30.0f)
+            MatrixView2f sheet,
+            MatrixView2f initial_formation,
+            Vec3f po_initial = Vec3f{},
+            float dt = 0.033333335f)
         {
-            std::vector<VvcmRsPoint2> raw_sheet = vvcm_rs::to_raw_points(sheet);
-            std::vector<VvcmRsPoint2> raw_formation = vvcm_rs::to_raw_points(initial_formation);
-            throw_on_error(vvcm_rs_simulation_new(
-                robot_count,
+            const float po[3] = {po_initial.x, po_initial.y, po_initial.z};
+            check(vvcm_rs_simulation_new(
                 hold_height,
-                raw_sheet.empty() ? nullptr : raw_sheet.data(),
-                raw_sheet.size(),
-                raw_formation.empty() ? nullptr : raw_formation.data(),
-                raw_formation.size(),
-                VvcmRsPoint3{po_initial.x, po_initial.y, po_initial.z},
+                sheet.raw(),
+                initial_formation.raw(),
+                po,
                 dt,
-                &handle_));
+                &simulation_));
         }
 
         ~VvcmSimulation()
         {
-            if (handle_ != nullptr)
-            {
-                vvcm_rs_simulation_free(handle_);
-            }
+            vvcm_rs_simulation_free(simulation_);
         }
 
         VvcmSimulation(const VvcmSimulation &) = delete;
         VvcmSimulation &operator=(const VvcmSimulation &) = delete;
 
-        VvcmSimulation(VvcmSimulation &&other) noexcept : handle_(other.handle_)
+        void set_velocity(MatrixView2f velocity)
         {
-            other.handle_ = nullptr;
-        }
-
-        VvcmSimulation &operator=(VvcmSimulation &&other) noexcept
-        {
-            if (this != &other)
-            {
-                if (handle_ != nullptr)
-                {
-                    vvcm_rs_simulation_free(handle_);
-                }
-                handle_ = other.handle_;
-                other.handle_ = nullptr;
-            }
-            return *this;
-        }
-
-        void set_velocity(const std::vector<Point2> &velocity)
-        {
-            std::vector<VvcmRsPoint2> raw_velocity = vvcm_rs::to_raw_points(velocity);
-            throw_on_error(vvcm_rs_simulation_set_velocity(
-                handle_,
-                raw_velocity.empty() ? nullptr : raw_velocity.data(),
-                raw_velocity.size()));
+            check(vvcm_rs_simulation_set_velocity(simulation_, velocity.raw()));
         }
 
         void step()
         {
-            throw_on_error(vvcm_rs_simulation_step(handle_));
+            check(vvcm_rs_simulation_step(simulation_));
         }
 
-        Point2 global_position() const
+        Vec2f global_position() const
         {
-            VvcmRsPoint2 point{};
-            throw_on_error(vvcm_rs_simulation_global_position(handle_, &point));
-            return Point2(point.x, point.y);
+            float point[2] = {};
+            check(vvcm_rs_simulation_global_position(simulation_, point));
+            return Vec2f{point[0], point[1]};
         }
 
-        Point3 object_position() const
+        Vec3f object_position() const
         {
-            VvcmRsPoint3 point{};
-            throw_on_error(vvcm_rs_simulation_object_position(handle_, &point));
-            return Point3(point.x, point.y, point.z);
+            float point[3] = {};
+            check(vvcm_rs_simulation_object_position(simulation_, point));
+            return Vec3f{point[0], point[1], point[2]};
         }
 
-        Point3 absolute_object_position() const
+        Vec3f absolute_object_position() const
         {
-            VvcmRsPoint3 point{};
-            throw_on_error(vvcm_rs_simulation_absolute_object_position(handle_, &point));
-            return Point3(point.x, point.y, point.z);
+            float point[3] = {};
+            check(vvcm_rs_simulation_absolute_object_position(simulation_, point));
+            return Vec3f{point[0], point[1], point[2]};
         }
 
         bool has_solution_index() const
         {
             uint8_t has_value = 0;
-            size_t index = 0;
-            throw_on_error(vvcm_rs_simulation_solution_index(handle_, &has_value, &index));
+            std::size_t index = 0;
+            check(vvcm_rs_simulation_solution_index(simulation_, &has_value, &index));
             return has_value != 0;
         }
 
-        size_t solution_index() const
+        MatrixView2f formation()
         {
-            uint8_t has_value = 0;
-            size_t index = 0;
-            throw_on_error(vvcm_rs_simulation_solution_index(handle_, &has_value, &index));
-            if (has_value == 0)
-            {
-                throw Error(VVCM_RS_ERROR_INVALID_ARGUMENT, "simulation has no selected solution");
-            }
-            return index;
+            VvcmRsMat2f view{};
+            check(vvcm_rs_simulation_formation_view(simulation_, &view));
+            return MatrixView2f(view.data, view.rows, view.stride);
         }
 
-        std::vector<Point2> formation() const
+        MatrixView2f absolute_formation()
         {
-            return read_points(
-                [&]() {
-                    size_t count = 0;
-                    throw_on_error(vvcm_rs_simulation_formation_count(handle_, &count));
-                    return count;
-                },
-                [&](size_t index, VvcmRsPoint2 *point) {
-                    return vvcm_rs_simulation_formation_point_at(handle_, index, point);
-                });
+            VvcmRsMat2f view{};
+            check(vvcm_rs_simulation_absolute_formation_view(simulation_, &view));
+            return MatrixView2f(view.data, view.rows, view.stride);
         }
 
-        std::vector<Point2> absolute_formation() const
+        MatrixView2f velocity()
         {
-            return read_points(
-                [&]() {
-                    size_t count = 0;
-                    throw_on_error(vvcm_rs_simulation_formation_count(handle_, &count));
-                    return count;
-                },
-                [&](size_t index, VvcmRsPoint2 *point) {
-                    return vvcm_rs_simulation_absolute_formation_point_at(handle_, index, point);
-                });
+            VvcmRsMat2f view{};
+            check(vvcm_rs_simulation_velocity_view(simulation_, &view));
+            return MatrixView2f(view.data, view.rows, view.stride);
         }
 
-        std::vector<Point2> velocity() const
+        FkSolutions solutions()
         {
-            return read_points(
-                [&]() {
-                    size_t count = 0;
-                    throw_on_error(vvcm_rs_simulation_formation_count(handle_, &count));
-                    return count;
-                },
-                [&](size_t index, VvcmRsPoint2 *point) {
-                    return vvcm_rs_simulation_velocity_point_at(handle_, index, point);
-                });
-        }
-
-        std::vector<size_t> taut_cables() const
-        {
-            size_t count = 0;
-            throw_on_error(vvcm_rs_simulation_taut_cable_count(handle_, &count));
-            std::vector<size_t> cables(count);
-            for (size_t index = 0; index < count; ++index)
-            {
-                throw_on_error(vvcm_rs_simulation_taut_cable_at(handle_, index, &cables[index]));
-            }
-            return cables;
-        }
-
-        float dt() const
-        {
-            float value = 0.0f;
-            throw_on_error(vvcm_rs_simulation_dt(handle_, &value));
-            return value;
+            return read_solutions(
+                simulation_,
+                vvcm_rs_simulation_solution_count,
+                vvcm_rs_simulation_solution_at,
+                vvcm_rs_simulation_solution_taut_cables,
+                vvcm_rs_simulation_solution_lambda_values);
         }
 
     private:
-        template <typename CountFn, typename PointFn>
-        static std::vector<Point2> read_points(CountFn &&count_fn, PointFn &&point_fn)
-        {
-            const size_t count = count_fn();
-            std::vector<Point2> points;
-            points.reserve(count);
-
-            for (size_t index = 0; index < count; ++index)
-            {
-                VvcmRsPoint2 point{};
-                throw_on_error(point_fn(index, &point));
-                points.push_back(Point2(point.x, point.y));
-            }
-
-            return points;
-        }
-
-        VvcmRsSimulation *handle_ = nullptr;
+        VvcmRsSimulation *simulation_ = nullptr;
     };
 
     class VvcmManualSimulation
     {
     public:
-        VvcmManualSimulation(size_t robot_count, float hold_height, const std::vector<Point2> &sheet)
+        VvcmManualSimulation(float hold_height, MatrixView2f sheet)
         {
-            std::vector<VvcmRsPoint2> raw_sheet = vvcm_rs::to_raw_points(sheet);
-            throw_on_error(vvcm_rs_manual_simulation_new(
-                robot_count,
-                hold_height,
-                raw_sheet.empty() ? nullptr : raw_sheet.data(),
-                raw_sheet.size(),
-                &handle_));
+            check(vvcm_rs_manual_simulation_new(hold_height, sheet.raw(), &simulation_));
         }
 
         ~VvcmManualSimulation()
         {
-            if (handle_ != nullptr)
-            {
-                vvcm_rs_manual_simulation_free(handle_);
-            }
+            vvcm_rs_manual_simulation_free(simulation_);
         }
 
         VvcmManualSimulation(const VvcmManualSimulation &) = delete;
         VvcmManualSimulation &operator=(const VvcmManualSimulation &) = delete;
 
-        VvcmManualSimulation(VvcmManualSimulation &&other) noexcept : handle_(other.handle_)
+        Vec3f init(MatrixView2f formation, Vec3f po_initial = Vec3f{})
         {
-            other.handle_ = nullptr;
+            const float po[3] = {po_initial.x, po_initial.y, po_initial.z};
+            float out[3] = {};
+            check(vvcm_rs_manual_simulation_init(simulation_, formation.raw(), po, out));
+            return Vec3f{out[0], out[1], out[2]};
         }
 
-        VvcmManualSimulation &operator=(VvcmManualSimulation &&other) noexcept
+        Vec3f get_new_stable_solution(MatrixView2f formation)
         {
-            if (this != &other)
-            {
-                if (handle_ != nullptr)
-                {
-                    vvcm_rs_manual_simulation_free(handle_);
-                }
-                handle_ = other.handle_;
-                other.handle_ = nullptr;
-            }
-            return *this;
+            float out[3] = {};
+            check(vvcm_rs_manual_simulation_get_new_stable_solution(
+                simulation_,
+                formation.raw(),
+                out));
+            return Vec3f{out[0], out[1], out[2]};
         }
 
-        Point3 init(const std::vector<Point2> &formation, Point3 po_initial = Point3::zero())
+        Vec2f global_position() const
         {
-            std::vector<VvcmRsPoint2> raw_formation = vvcm_rs::to_raw_points(formation);
-            VvcmRsPoint3 point{};
-            throw_on_error(vvcm_rs_manual_simulation_init(
-                handle_,
-                raw_formation.empty() ? nullptr : raw_formation.data(),
-                raw_formation.size(),
-                VvcmRsPoint3{po_initial.x, po_initial.y, po_initial.z},
-                &point));
-            return Point3(point.x, point.y, point.z);
-        }
-
-        Point3 get_new_stable_solution(const std::vector<Point2> &formation)
-        {
-            std::vector<VvcmRsPoint2> raw_formation = vvcm_rs::to_raw_points(formation);
-            VvcmRsPoint3 point{};
-            throw_on_error(vvcm_rs_manual_simulation_get_new_stable_solution(
-                handle_,
-                raw_formation.empty() ? nullptr : raw_formation.data(),
-                raw_formation.size(),
-                &point));
-            return Point3(point.x, point.y, point.z);
-        }
-
-        Point2 global_position() const
-        {
-            VvcmRsPoint2 point{};
-            throw_on_error(vvcm_rs_manual_simulation_global_position(handle_, &point));
-            return Point2(point.x, point.y);
+            float point[2] = {};
+            check(vvcm_rs_manual_simulation_global_position(simulation_, point));
+            return Vec2f{point[0], point[1]};
         }
 
         bool has_formation() const
         {
             uint8_t has_value = 0;
-            throw_on_error(vvcm_rs_manual_simulation_has_formation(handle_, &has_value));
+            check(vvcm_rs_manual_simulation_has_formation(simulation_, &has_value));
             return has_value != 0;
         }
 
-        std::vector<Point2> formation() const
+        MatrixView2f formation()
         {
-            return read_points(
-                [&]() {
-                    size_t count = 0;
-                    throw_on_error(vvcm_rs_manual_simulation_formation_count(handle_, &count));
-                    return count;
-                },
-                [&](size_t index, VvcmRsPoint2 *point) {
-                    return vvcm_rs_manual_simulation_formation_point_at(handle_, index, point);
-                });
+            VvcmRsMat2f view{};
+            check(vvcm_rs_manual_simulation_formation_view(simulation_, &view));
+            return MatrixView2f(view.data, view.rows, view.stride);
         }
 
         bool has_object_position() const
         {
             uint8_t has_value = 0;
-            VvcmRsPoint3 point{};
-            throw_on_error(vvcm_rs_manual_simulation_object_position(handle_, &has_value, &point));
+            float point[3] = {};
+            check(vvcm_rs_manual_simulation_object_position(simulation_, &has_value, point));
             return has_value != 0;
         }
 
-        Point3 object_position() const
+        Vec3f object_position() const
         {
             uint8_t has_value = 0;
-            VvcmRsPoint3 point{};
-            throw_on_error(vvcm_rs_manual_simulation_object_position(handle_, &has_value, &point));
+            float point[3] = {};
+            check(vvcm_rs_manual_simulation_object_position(simulation_, &has_value, point));
             if (has_value == 0)
             {
-                throw Error(VVCM_RS_ERROR_INVALID_ARGUMENT, "manual simulation is not initialized");
+                throw Error(VVCM_RS_ERROR_INVALID_ARGUMENT, "manual simulation has no object position");
             }
-            return Point3(point.x, point.y, point.z);
+            return Vec3f{point[0], point[1], point[2]};
         }
 
-        bool has_absolute_object_position() const
+        Vec3f absolute_object_position() const
         {
             uint8_t has_value = 0;
-            VvcmRsPoint3 point{};
-            throw_on_error(vvcm_rs_manual_simulation_absolute_object_position(
-                handle_,
-                &has_value,
-                &point));
-            return has_value != 0;
-        }
-
-        Point3 absolute_object_position() const
-        {
-            uint8_t has_value = 0;
-            VvcmRsPoint3 point{};
-            throw_on_error(vvcm_rs_manual_simulation_absolute_object_position(
-                handle_,
-                &has_value,
-                &point));
+            float point[3] = {};
+            check(vvcm_rs_manual_simulation_absolute_object_position(simulation_, &has_value, point));
             if (has_value == 0)
             {
-                throw Error(VVCM_RS_ERROR_INVALID_ARGUMENT, "manual simulation is not initialized");
+                throw Error(VVCM_RS_ERROR_INVALID_ARGUMENT, "manual simulation has no object position");
             }
-            return Point3(point.x, point.y, point.z);
+            return Vec3f{point[0], point[1], point[2]};
         }
 
         bool has_solution_index() const
         {
             uint8_t has_value = 0;
-            size_t index = 0;
-            throw_on_error(vvcm_rs_manual_simulation_solution_index(handle_, &has_value, &index));
+            std::size_t index = 0;
+            check(vvcm_rs_manual_simulation_solution_index(simulation_, &has_value, &index));
             return has_value != 0;
         }
 
-        size_t solution_index() const
+        std::vector<std::size_t> taut_cables() const
         {
-            uint8_t has_value = 0;
-            size_t index = 0;
-            throw_on_error(vvcm_rs_manual_simulation_solution_index(handle_, &has_value, &index));
-            if (has_value == 0)
+            std::size_t count = 0;
+            check(vvcm_rs_manual_simulation_taut_cable_count(simulation_, &count));
+            std::vector<std::size_t> out(count);
+            for (std::size_t index = 0; index < count; ++index)
             {
-                throw Error(VVCM_RS_ERROR_INVALID_ARGUMENT, "manual simulation has no selected solution");
+                check(vvcm_rs_manual_simulation_taut_cable_at(simulation_, index, &out[index]));
             }
-            return index;
+            return out;
         }
 
-        std::vector<size_t> taut_cables() const
+        FkSolutions solutions()
         {
-            size_t count = 0;
-            throw_on_error(vvcm_rs_manual_simulation_taut_cable_count(handle_, &count));
-            std::vector<size_t> cables(count);
-            for (size_t index = 0; index < count; ++index)
-            {
-                throw_on_error(
-                    vvcm_rs_manual_simulation_taut_cable_at(handle_, index, &cables[index]));
-            }
-            return cables;
+            return read_solutions(
+                simulation_,
+                vvcm_rs_manual_simulation_solution_count,
+                vvcm_rs_manual_simulation_solution_at,
+                vvcm_rs_manual_simulation_solution_taut_cables,
+                vvcm_rs_manual_simulation_solution_lambda_values);
         }
 
     private:
-        template <typename CountFn, typename PointFn>
-        static std::vector<Point2> read_points(CountFn &&count_fn, PointFn &&point_fn)
-        {
-            const size_t count = count_fn();
-            std::vector<Point2> points;
-            points.reserve(count);
-
-            for (size_t index = 0; index < count; ++index)
-            {
-                VvcmRsPoint2 point{};
-                throw_on_error(point_fn(index, &point));
-                points.push_back(Point2(point.x, point.y));
-            }
-
-            return points;
-        }
-
-        VvcmRsManualSimulation *handle_ = nullptr;
+        VvcmRsManualSimulation *simulation_ = nullptr;
     };
 } // namespace vvcm_rs
 

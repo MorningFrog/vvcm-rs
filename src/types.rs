@@ -1,10 +1,13 @@
-//! Public domain types used by the VVCM forward-kinematics API.
+//! Public geometry and solution types used by the VVCM API.
 //!
-//! These types intentionally keep the public surface independent from the
-//! internal `nalgebra` matrices used by the solver. All coordinates and lengths
-//! are represented with [`Scalar`] and must use a consistent length unit.
+//! The Rust API exposes `nalgebra` point and vector types directly. Foreign
+//! language bindings adapt their matrix or typed-array inputs at the boundary
+//! instead of shaping the Rust core around language-neutral wrapper types.
 
-use crate::VvcmError;
+use nalgebra::{
+    Point2 as NalgebraPoint2, Point3 as NalgebraPoint3, Vector2 as NalgebraVector2,
+    Vector3 as NalgebraVector3,
+};
 
 /// Floating-point scalar used by the solver and public geometry types.
 ///
@@ -12,239 +15,143 @@ use crate::VvcmError;
 /// compatibility with the bundled fixtures and regression data.
 pub type Scalar = f32;
 
-/// A two-dimensional point or vector in the XY plane.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
-pub struct Point2 {
-    /// X coordinate.
-    pub x: Scalar,
-    /// Y coordinate.
-    pub y: Scalar,
-}
+/// A two-dimensional point in the XY plane.
+pub type Point2 = NalgebraPoint2<Scalar>;
 
-impl Point2 {
-    /// Creates a point from explicit XY coordinates.
-    pub fn new(x: Scalar, y: Scalar) -> Self {
-        Self { x, y }
-    }
+/// A three-dimensional point.
+pub type Point3 = NalgebraPoint3<Scalar>;
 
-    /// Returns the origin `(0, 0)`.
-    pub fn zero() -> Self {
-        Self::default()
-    }
+/// A two-dimensional vector in the XY plane.
+pub type Vector2 = NalgebraVector2<Scalar>;
 
-    /// Multiplies both coordinates by `factor`.
-    pub fn scaled_by(self, factor: Scalar) -> Self {
-        Self::new(self.x * factor, self.y * factor)
-    }
+/// A three-dimensional vector.
+pub type Vector3 = NalgebraVector3<Scalar>;
 
-    /// Returns this point translated by the XY `offset`.
-    pub fn translated_by(self, offset: Point2) -> Self {
-        Self::new(self.x + offset.x, self.y + offset.y)
-    }
-
-    /// Returns this point expressed relative to `origin`.
-    pub fn relative_to(self, origin: Point2) -> Self {
-        Self::new(self.x - origin.x, self.y - origin.y)
-    }
-
-    /// Computes the Euclidean distance to another 2D point.
-    pub fn distance_to(self, other: Point2) -> Scalar {
-        let dx = self.x - other.x;
-        let dy = self.y - other.y;
-        (dx * dx + dy * dy).sqrt()
-    }
-}
-
-/// A three-dimensional point or vector.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
-pub struct Point3 {
-    /// X coordinate.
-    pub x: Scalar,
-    /// Y coordinate.
-    pub y: Scalar,
-    /// Z coordinate.
-    pub z: Scalar,
-}
-
-impl Point3 {
-    /// Creates a point from explicit XYZ coordinates.
-    pub fn new(x: Scalar, y: Scalar, z: Scalar) -> Self {
-        Self { x, y, z }
-    }
-
-    /// Returns the origin `(0, 0, 0)`.
-    pub fn zero() -> Self {
-        Self::default()
-    }
-
-    /// Returns this point translated in the XY plane, leaving Z unchanged.
-    pub fn translated_xy_by(self, offset: Point2) -> Self {
-        Self::new(self.x + offset.x, self.y + offset.y, self.z)
-    }
-
-    /// Returns this point expressed relative to an XY `origin`, leaving Z
-    /// unchanged.
-    pub fn relative_xy_to(self, origin: Point2) -> Self {
-        Self::new(self.x - origin.x, self.y - origin.y, self.z)
-    }
-
-    /// Computes the Euclidean distance to another 3D point.
-    pub fn distance_to(self, other: Point3) -> Scalar {
-        let dx = self.x - other.x;
-        let dy = self.y - other.y;
-        let dz = self.z - other.z;
-        (dx * dx + dy * dy + dz * dz).sqrt()
-    }
-}
-
-/// Ordered XY positions for the robots or their velocities.
+/// Converts common row-like values into a [`Point2`].
 ///
-/// The point order must match the order of the sheet vertices supplied through
-/// [`SheetShape`]. In solver calls, each point represents the robot endpoint of
-/// the corresponding virtual cable.
-#[derive(Debug, Clone, PartialEq)]
-pub struct RobotFormation {
-    points: Vec<Point2>,
+/// This local trait exists because the crate cannot implement standard
+/// conversion traits for `nalgebra` point types it does not own.
+pub trait IntoPoint2 {
+    /// Converts this value into a `nalgebra` 2D point.
+    fn into_point2(self) -> Point2;
 }
 
-impl RobotFormation {
-    /// Creates a non-empty robot formation.
-    ///
-    /// Returns [`VvcmError::DimensionMismatch`] when `points` is empty.
-    pub fn new(points: Vec<Point2>) -> Result<Self, VvcmError> {
-        if points.is_empty() {
-            return Err(VvcmError::DimensionMismatch {
-                context: "robot formation",
-                expected: 1,
-                actual: 0,
-            });
-        }
-
-        Ok(Self { points })
-    }
-
-    /// Creates a zero-valued formation with one point per robot.
-    ///
-    /// This is primarily useful for velocity inputs where every robot is
-    /// initially stationary. Returns [`VvcmError::DimensionMismatch`] when
-    /// `robot_count` is zero.
-    pub fn zeros(robot_count: usize) -> Result<Self, VvcmError> {
-        if robot_count == 0 {
-            return Err(VvcmError::DimensionMismatch {
-                context: "robot formation",
-                expected: 1,
-                actual: 0,
-            });
-        }
-
-        Ok(Self {
-            points: vec![Point2::zero(); robot_count],
-        })
-    }
-
-    /// Returns the number of points in the formation.
-    pub fn len(&self) -> usize {
-        self.points.len()
-    }
-
-    /// Returns `true` when the formation contains no points.
-    ///
-    /// Values constructed through [`RobotFormation::new`] are never empty; this
-    /// method is provided for conventional collection-like access.
-    pub fn is_empty(&self) -> bool {
-        self.points.is_empty()
-    }
-
-    /// Borrows the ordered robot points.
-    pub fn points(&self) -> &[Point2] {
-        &self.points
-    }
-
-    /// Consumes the formation and returns the underlying ordered points.
-    pub fn into_points(self) -> Vec<Point2> {
-        self.points
-    }
-
-    /// Computes the arithmetic mean of all points.
-    pub fn centroid(&self) -> Point2 {
-        let sum = self.points.iter().fold(Point2::zero(), |acc, point| {
-            Point2::new(acc.x + point.x, acc.y + point.y)
-        });
-        sum.scaled_by(1.0 / self.points.len() as Scalar)
-    }
-
-    /// Returns a new formation translated by `offset`.
-    pub fn translated_by(&self, offset: Point2) -> Self {
-        Self {
-            points: self
-                .points
-                .iter()
-                .map(|point| point.translated_by(offset))
-                .collect(),
-        }
-    }
-
-    /// Returns a new formation expressed relative to `origin`.
-    pub fn relative_to(&self, origin: Point2) -> Self {
-        Self {
-            points: self
-                .points
-                .iter()
-                .map(|point| point.relative_to(origin))
-                .collect(),
-        }
-    }
-
-    /// Returns `true` when every point is exactly `(0, 0)`.
-    pub fn all_zero(&self) -> bool {
-        self.points
-            .iter()
-            .all(|point| point.x == 0.0 && point.y == 0.0)
+impl IntoPoint2 for Point2 {
+    fn into_point2(self) -> Point2 {
+        self
     }
 }
 
-/// Ordered sheet attachment vertices in the sheet-local XY frame.
-///
-/// The vertex order must match the robot order used by [`RobotFormation`].
-#[derive(Debug, Clone, PartialEq)]
-pub struct SheetShape {
-    vertices: Vec<Point2>,
+impl IntoPoint2 for &Point2 {
+    fn into_point2(self) -> Point2 {
+        *self
+    }
 }
 
-impl SheetShape {
-    /// Creates a sheet shape with at least three vertices.
-    ///
-    /// Returns [`VvcmError::DimensionMismatch`] when fewer than three vertices
-    /// are supplied.
-    pub fn new(vertices: Vec<Point2>) -> Result<Self, VvcmError> {
-        if vertices.len() < 3 {
-            return Err(VvcmError::DimensionMismatch {
-                context: "sheet shape",
-                expected: 3,
-                actual: vertices.len(),
-            });
-        }
-
-        Ok(Self { vertices })
+impl IntoPoint2 for [Scalar; 2] {
+    fn into_point2(self) -> Point2 {
+        Point2::new(self[0], self[1])
     }
+}
 
-    /// Returns the number of sheet vertices.
-    pub fn len(&self) -> usize {
-        self.vertices.len()
+impl IntoPoint2 for &[Scalar; 2] {
+    fn into_point2(self) -> Point2 {
+        Point2::new(self[0], self[1])
     }
+}
 
-    /// Returns `true` when the sheet contains no vertices.
-    ///
-    /// Values constructed through [`SheetShape::new`] are never empty; this
-    /// method is provided for conventional collection-like access.
-    pub fn is_empty(&self) -> bool {
-        self.vertices.is_empty()
+impl IntoPoint2 for (Scalar, Scalar) {
+    fn into_point2(self) -> Point2 {
+        Point2::new(self.0, self.1)
     }
+}
 
-    /// Borrows the ordered sheet vertices.
-    pub fn vertices(&self) -> &[Point2] {
-        &self.vertices
+impl IntoPoint2 for &(Scalar, Scalar) {
+    fn into_point2(self) -> Point2 {
+        Point2::new(self.0, self.1)
     }
+}
+
+/// Converts common row-like values into a [`Point3`].
+pub trait IntoPoint3 {
+    /// Converts this value into a `nalgebra` 3D point.
+    fn into_point3(self) -> Point3;
+}
+
+impl IntoPoint3 for Point3 {
+    fn into_point3(self) -> Point3 {
+        self
+    }
+}
+
+impl IntoPoint3 for &Point3 {
+    fn into_point3(self) -> Point3 {
+        *self
+    }
+}
+
+impl IntoPoint3 for [Scalar; 3] {
+    fn into_point3(self) -> Point3 {
+        Point3::new(self[0], self[1], self[2])
+    }
+}
+
+impl IntoPoint3 for &[Scalar; 3] {
+    fn into_point3(self) -> Point3 {
+        Point3::new(self[0], self[1], self[2])
+    }
+}
+
+impl IntoPoint3 for (Scalar, Scalar, Scalar) {
+    fn into_point3(self) -> Point3 {
+        Point3::new(self.0, self.1, self.2)
+    }
+}
+
+impl IntoPoint3 for &(Scalar, Scalar, Scalar) {
+    fn into_point3(self) -> Point3 {
+        Point3::new(self.0, self.1, self.2)
+    }
+}
+
+/// Converts a row-like value into a [`Point2`].
+pub fn point2(value: impl IntoPoint2) -> Point2 {
+    value.into_point2()
+}
+
+/// Converts a row-like value into a [`Point3`].
+pub fn point3(value: impl IntoPoint3) -> Point3 {
+    value.into_point3()
+}
+
+/// Returns the origin `(0, 0)`.
+pub fn point2_zero() -> Point2 {
+    Point2::new(0.0, 0.0)
+}
+
+/// Returns the origin `(0, 0, 0)`.
+pub fn point3_zero() -> Point3 {
+    Point3::new(0.0, 0.0, 0.0)
+}
+
+/// Computes the Euclidean distance between two 2D points.
+pub fn distance2(left: Point2, right: Point2) -> Scalar {
+    (left - right).norm()
+}
+
+/// Computes the Euclidean distance between two 3D points.
+pub fn distance3(left: Point3, right: Point3) -> Scalar {
+    (left - right).norm()
+}
+
+/// Returns `point` shifted by `origin`, preserving the Z coordinate.
+pub fn relative_xy_to(point: Point3, origin: Point2) -> Point3 {
+    Point3::new(point.x - origin.x, point.y - origin.y, point.z)
+}
+
+/// Returns `point` translated by an XY offset, preserving the Z coordinate.
+pub fn translated_xy_by(point: Point3, offset: Point2) -> Point3 {
+    Point3::new(point.x + offset.x, point.y + offset.y, point.z)
 }
 
 /// A single forward-kinematics candidate solution.
@@ -254,7 +161,7 @@ impl SheetShape {
 /// `taut_cables` contains the robot indices whose virtual cables are taut for
 /// this solution. `lambda_values` stores the corresponding Lagrange multiplier
 /// coefficients in the same order as `taut_cables`.
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FkSolution {
     /// Whether the candidate is locally stable according to the VVCM stability
     /// test.
@@ -271,6 +178,18 @@ pub struct FkSolution {
     /// `taut_cables[i]`. Slack cables are omitted rather than represented by
     /// zero-valued placeholders.
     pub lambda_values: Vec<Scalar>,
+}
+
+impl Default for FkSolution {
+    fn default() -> Self {
+        Self {
+            stable: false,
+            po: point3_zero(),
+            vo: point2_zero(),
+            taut_cables: Vec::new(),
+            lambda_values: Vec::new(),
+        }
+    }
 }
 
 impl FkSolution {
@@ -340,9 +259,7 @@ impl FkSolutions {
             .enumerate()
             .filter(|(_, solution)| solution.stable)
             .min_by(|(_, left), (_, right)| {
-                left.po
-                    .distance_to(reference)
-                    .total_cmp(&right.po.distance_to(reference))
+                distance3(left.po, reference).total_cmp(&distance3(right.po, reference))
             })
     }
 

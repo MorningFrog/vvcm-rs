@@ -1,20 +1,16 @@
 #![allow(clippy::excessive_precision)]
 
-use vvcm_rs::{
-    Point2, Point3, RobotFormation, Scalar, SheetShape, VvcmManualSimulation, VvcmSimulation,
-};
+use vvcm_rs::{Point2, Point3, Scalar, Vector2, VvcmManualSimulation, VvcmSimulation};
 
 #[test]
 fn manual_simulation_returns_expected_branch() {
-    // Manual simulation starts from an unfolded sheet shape and waits for an explicit formation.
-    let mut simulation = VvcmManualSimulation::new(6, 823.0, six_robot_sheet()).unwrap();
+    let mut simulation = VvcmManualSimulation::new(823.0, six_robot_sheet()).unwrap();
 
-    // Initialize at the world origin to select the first stable branch.
+    let formation = six_robot_formation();
     let po = simulation
-        .init(six_robot_formation(), Point3::zero())
+        .init(&formation, Point3::new(0.0, 0.0, 0.0))
         .unwrap();
 
-    // The absolute position accessor should mirror the value returned by init.
     assert_point3_close(po, Point3::new(110.255, 244.585, 301.218), 0.2);
     assert_point3_close(
         simulation.absolute_object_position().unwrap(),
@@ -24,34 +20,29 @@ fn manual_simulation_returns_expected_branch() {
     assert!(simulation.solution_index().is_some());
     assert!(!simulation.taut_cables().is_empty());
 
-    // Re-solving the same formation should keep the same stable branch.
-    let po = simulation
-        .get_new_stable_solution(six_robot_formation())
-        .unwrap();
+    let po = simulation.get_new_stable_solution(&formation).unwrap();
 
     assert_point3_close(po, Point3::new(110.255, 244.585, 301.218), 0.2);
 }
 
 #[test]
 fn velocity_simulation_initializes_and_steps_consistently() {
-    // Velocity simulation wires together the sheet, formation, object pose, and time step.
+    let formation = six_robot_formation();
     let mut simulation = VvcmSimulation::new(
-        6,
         823.0,
         six_robot_sheet(),
-        six_robot_formation(),
-        Point3::zero(),
+        &formation,
+        Point3::new(0.0, 0.0, 0.0),
         1.0 / 30.0,
     )
     .unwrap();
 
-    // The local formation is expressed relative to the first robot, so the first point becomes the origin.
     assert_point2_close(
         simulation.global_position(),
         Point2::new(-27.419184, -176.293854),
         0.001,
     );
-    assert_point2_close(simulation.formation().points()[0], Point2::zero(), 0.001);
+    assert_point2_close(simulation.formation()[0], Point2::new(0.0, 0.0), 0.001);
     assert_point3_close(
         simulation.object_position(),
         Point3::new(137.674, 420.879, 301.218),
@@ -64,36 +55,30 @@ fn velocity_simulation_initializes_and_steps_consistently() {
     );
     assert!(simulation.solution_index().is_some());
 
-    // A zero-velocity step should not change the object pose.
     let before_zero_step = simulation.object_position();
     simulation.step().unwrap();
     assert_eq!(simulation.object_position(), before_zero_step);
 
-    // Apply a small velocity to the first robot and step once more.
     simulation
-        .set_velocity(
-            RobotFormation::new(vec![
-                Point2::new(5.0, 5.0),
-                Point2::zero(),
-                Point2::zero(),
-                Point2::zero(),
-                Point2::zero(),
-                Point2::zero(),
-            ])
-            .unwrap(),
-        )
+        .set_velocity(&[
+            Vector2::new(5.0, 5.0),
+            Vector2::new(0.0, 0.0),
+            Vector2::new(0.0, 0.0),
+            Vector2::new(0.0, 0.0),
+            Vector2::new(0.0, 0.0),
+            Vector2::new(0.0, 0.0),
+        ])
         .unwrap();
     simulation.step().unwrap();
 
-    // Confirm the frame and object pose advance consistently after the update.
     assert_point2_close(
         simulation.global_position(),
         Point2::new(-27.252517, -176.12718),
         0.01,
     );
-    assert_point2_close(simulation.formation().points()[0], Point2::zero(), 0.001);
+    assert_point2_close(simulation.formation()[0], Point2::new(0.0, 0.0), 0.001);
     assert_point2_close(
-        simulation.formation().points()[1],
+        simulation.formation()[1],
         Point2::new(425.394, 140.937),
         0.02,
     );
@@ -104,34 +89,29 @@ fn velocity_simulation_initializes_and_steps_consistently() {
     );
 }
 
-fn six_robot_formation() -> RobotFormation {
-    // Shared six-robot fixture: each point is a robot node position on the world-coordinate XY plane.
-    RobotFormation::new(vec![
+fn six_robot_formation() -> Vec<Point2> {
+    vec![
         Point2::new(-27.419184, -176.293854),
         Point2::new(398.141083, -35.190411),
         Point2::new(517.018127, 338.271301),
         Point2::new(285.155762, 609.95575),
         Point2::new(-175.608231, 569.463562),
         Point2::new(-301.437988, 194.695297),
-    ])
-    .unwrap()
+    ]
 }
 
-fn six_robot_sheet() -> SheetShape {
-    // Matching unfolded-sheet fixture: each point is a vertex in the sheet's local coordinate frame.
-    SheetShape::new(vec![
+fn six_robot_sheet() -> Vec<Point2> {
+    vec![
         Point2::new(-131.665741, -376.508026),
         Point2::new(480.675873, -388.066681),
         Point2::new(877.700256, 217.088806),
         Point2::new(562.778748, 826.754089),
         Point2::new(-107.442101, 918.166626),
         Point2::new(-453.516937, 284.887146),
-    ])
-    .unwrap()
+    ]
 }
 
 fn assert_point2_close(actual: Point2, expected: Point2, tolerance: Scalar) {
-    // Compare each axis with a tolerance because the simulation uses floats.
     assert!(
         (actual.x - expected.x).abs() <= tolerance,
         "x differs: actual {}, expected {}",
@@ -147,7 +127,6 @@ fn assert_point2_close(actual: Point2, expected: Point2, tolerance: Scalar) {
 }
 
 fn assert_point3_close(actual: Point3, expected: Point3, tolerance: Scalar) {
-    // Reuse the 2D helper for x/y and compare z separately.
     assert_point2_close(
         Point2::new(actual.x, actual.y),
         Point2::new(expected.x, expected.y),

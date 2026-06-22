@@ -62,8 +62,6 @@ cd <repository-name>
 cargo build
 ```
 
-For C++ export work and tests, install a C++17 compiler. On Windows, MSVC is recommended; on Linux and macOS, GCC or Clang is sufficient.
-
 ### 3. Install Python Binding Tools
 
 Use a `uv` virtual environment for Python binding development and tests:
@@ -74,7 +72,13 @@ uv venv .venv
 uv pip install maturin pytest numpy
 ```
 
-### 4. Install WebAssembly and npm Tools
+The Python bindings are NumPy-first; local tests and examples use C-contiguous `float32` arrays for formation, sheet, velocity, and point inputs.
+
+### 4. Install C++ and C Native Tools
+
+For C++ and C export work and tests, install a C++17 compiler. On Windows, MSVC is recommended; on Linux and macOS, GCC or Clang is sufficient.
+
+### 5. Install JavaScript and TypeScript Tools
 
 Use these tools for JavaScript/TypeScript package development and release validation:
 
@@ -84,7 +88,7 @@ cargo install wasm-pack --version 0.15.0 --locked
 npm install --prefix wasm --ignore-scripts --no-package-lock
 ```
 
-### 5. Install Packages From Source
+### 6. Install Packages From Source
 
 Use these commands when you need to test local source changes before a published release exists.
 
@@ -112,9 +116,30 @@ cargo build --lib --release
 
 The debug build writes artifacts under `target/debug`; the release build writes optimized artifacts under `target/release`.
 
-#### C and C++
+#### Python
 
-Use the repo-local vcpkg overlay port for C/C++ source installs. It builds the native Rust library with Cargo and installs the C header, C++17 wrapper, and CMake package metadata:
+Install the Python package from the source tree into the active virtual environment with maturin. The debug install is useful while developing because `maturin develop` uses Cargo's debug profile by default:
+
+```bash
+maturin develop
+```
+
+Use a release build when you need optimized Python extension performance:
+
+```bash
+maturin develop --release
+```
+
+To build a distributable wheel from source, use the release build:
+
+```bash
+maturin build --release --locked --out dist
+python -m pip install --force-reinstall dist/<wheel-file>.whl
+```
+
+#### C++ and C
+
+Use the repo-local vcpkg overlay port for C++ and C source installs. It builds the native Rust library with Cargo and installs the C++17 wrapper, C header, and CMake package metadata:
 
 ```bash
 vcpkg install vvcm-rs --overlay-ports=<path-to-vvcm-rs>/vcpkg/ports --triplet <triplet>
@@ -147,27 +172,6 @@ find_package(vvcm-rs CONFIG REQUIRED)
 target_link_libraries(app PRIVATE vvcm_rs::vvcm_rs)
 ```
 
-#### Python
-
-Install the Python package from the source tree into the active virtual environment with maturin. The debug install is useful while developing because `maturin develop` uses Cargo's debug profile by default:
-
-```bash
-maturin develop
-```
-
-Use a release build when you need optimized Python extension performance:
-
-```bash
-maturin develop --release
-```
-
-To build a distributable wheel from source, use the release build:
-
-```bash
-maturin build --release --locked --out dist
-python -m pip install --force-reinstall dist/<wheel-file>.whl
-```
-
 #### JavaScript and TypeScript
 
 Build the WebAssembly npm package from the source tree with `wasm-pack`, then prepare the scoped and unscoped package directories:
@@ -180,7 +184,7 @@ python scripts/package_wasm_npm.py
 
 The generated publish-ready package directories are placed under `npm-dist/morningfrog-vvcm-rs` and `npm-dist/vvcm-rs`. They both contain the same WebAssembly artifact and TypeScript declarations, with only the npm package name changed.
 
-### 6. Start the Example
+### 7. Start the Example
 
 ```bash
 cargo run --example basic_fk
@@ -188,14 +192,14 @@ cargo run --example basic_fk
 
 ## Repository Structure
 
-The repository centers on a single Rust crate with Python, WebAssembly, and C/C++ exports:
+The repository centers on a single Rust crate with Python, C++, C, and JavaScript/TypeScript exports:
 
-* `src/` contains the core Rust implementation, including the FK solver, simulation wrappers, FFI layer, WebAssembly bindings, Python bindings, math helpers, error types, and public domain types.
-* `include/` contains the C header and C++ wrapper for native consumers.
+* `src/` contains the core Rust implementation, including the FK solver, simulation wrappers, Python bindings, FFI layer, WebAssembly bindings, math helpers, error types, and public domain types.
 * `python/` contains the published Python package, module entry point, and type information shipped with the wheel.
+* `include/` contains the C++ wrapper and C header for native consumers.
 * `wasm/` contains the npm package entry point, TypeScript declarations, package README, and TypeScript smoke test for the WebAssembly build.
 * `examples/` contains runnable Rust examples and timing demos.
-* `tests/` contains Rust smoke tests, the C++ export smoke test, WebAssembly binding tests, and Python binding tests.
+* `tests/` contains Rust smoke tests, Python binding tests, the C++ export smoke test, and WebAssembly binding tests.
 * `vcpkg/ports/vvcm-rs/` contains the repo-local vcpkg overlay port and its packaging metadata.
 * `vcpkg/prebuilt-ports/vvcm-rs/` contains the template used to generate the prebuilt vcpkg overlay archive published with releases.
 * `scripts/` contains packaging helpers for native release zips, WebAssembly npm package directories, and the generated prebuilt vcpkg overlay archive.
@@ -218,7 +222,7 @@ maturin develop
 python -m pytest tests/python
 ```
 
-When changing C/C++ export headers or FFI, also confirm the C++ smoke test succeeds:
+When changing C++ and C export headers or FFI, also confirm the C++ smoke test succeeds:
 
 ```bash
 cargo test --test cpp_export_smoke
@@ -259,7 +263,7 @@ maturin develop
 python -m pytest tests/python
 ```
 
-C/C++ export changes should also pass:
+C++ and C export changes should also pass:
 
 ```bash
 cargo test --test cpp_export_smoke
@@ -311,7 +315,7 @@ When bumping a release version, run `python scripts/sync_versions.py <version>` 
 
 Before triggering a release, make sure the repository has configured `CARGO_REGISTRY_TOKEN` for crates.io. npm uses GitHub Actions trusted publishing, so configure a trusted publisher for both `@morningfrog/vvcm-rs` and `vvcm-rs` on npmjs.com before running the workflow. PyPI publishing uses the configured GitHub trusted publisher identity.
 
-The release workflow validates the Rust checks, the WebAssembly npm package, the TypeScript declaration smoke test, the Python sdist, the CPython 3.10 through 3.14 Python wheel matrix for Windows x64, Linux x64, and macOS arm64, the source overlay, the native package matrix for Windows x64, Linux x64, and macOS arm64, and the prebuilt vcpkg overlay artifacts, then creates the Git tag and GitHub release before publishing to crates.io, npm through trusted publishing, and PyPI.
+The release workflow validates the Rust checks, the Python sdist, the CPython 3.10 through 3.14 Python wheel matrix for Windows x64, Linux x64, and macOS arm64, the source overlay, the native package matrix for Windows x64, Linux x64, and macOS arm64, the prebuilt vcpkg overlay artifacts, the WebAssembly npm package, and the TypeScript declaration smoke test, then creates the Git tag and GitHub release before publishing to crates.io, PyPI, and npm through trusted publishing.
 
 The npm release publishes both `@morningfrog/vvcm-rs` and `vvcm-rs` from the same WebAssembly artifact through GitHub Actions trusted publishing. The release workflow runs `python scripts/sync_versions.py --check` before publishing, so keep the version files synchronized before running the workflow.
 

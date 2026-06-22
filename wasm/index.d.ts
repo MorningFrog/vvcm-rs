@@ -1,19 +1,5 @@
-export type Point2Input = readonly [number, number] | { readonly x: number; readonly y: number };
-
-export type Point3Input =
-  | readonly [number, number, number]
-  | { readonly x: number; readonly y: number; readonly z: number };
-
-export interface Point2 {
-  x: number;
-  y: number;
-}
-
-export interface Point3 {
-  x: number;
-  y: number;
-  z: number;
-}
+export type PointMatrixInput = Float32Array;
+export type Point3Input = Float32Array;
 
 export type VvcmErrorCode =
   | "INVALID_ARGUMENT"
@@ -57,10 +43,21 @@ export type VvcmError =
   | VvcmNoSolutionError
   | VvcmNoStableSolutionError;
 
+export interface Point2Output {
+  x: number;
+  y: number;
+}
+
+export interface Point3Output {
+  x: number;
+  y: number;
+  z: number;
+}
+
 export interface FkSolutionOutput {
   stable: boolean;
-  po: Point3;
-  vo: Point2;
+  po: Point3Output;
+  vo: Point2Output;
   tautCables: number[];
   lambdaValues: number[];
 }
@@ -74,10 +71,9 @@ export interface FkSolutionsOutput {
 export function version(): string;
 
 export class VvcmFk {
-  constructor(robotCount: number, holdHeight: number, sheet: readonly Point2Input[]);
-  updateStableSolutions(formation: readonly Point2Input[]): FkSolutionsOutput;
+  constructor(holdHeight: number, sheet: PointMatrixInput);
+  updateStableSolutions(formation: PointMatrixInput): FkSolutionsOutput;
   solutions(): FkSolutionsOutput;
-  stableSolutions(): FkSolutionOutput[];
   robotCount(): number;
   holdHeight(): number;
   free(): void;
@@ -85,38 +81,37 @@ export class VvcmFk {
 
 export class VvcmSimulation {
   constructor(
-    robotCount: number,
     holdHeight: number,
-    sheet: readonly Point2Input[],
-    initialFormation: readonly Point2Input[],
+    sheet: PointMatrixInput,
+    initialFormation: PointMatrixInput,
     poInitial: Point3Input,
     dt: number,
   );
-  setVelocity(velocity: readonly Point2Input[]): void;
+  setVelocity(velocity: PointMatrixInput): void;
   step(): void;
-  absoluteFormation(): Point2[];
-  absoluteObjectPosition(): Point3;
-  globalPosition(): Point2;
-  formation(): Point2[];
-  objectPosition(): Point3;
-  tautCables(): number[];
+  absoluteFormation(): Float32Array;
+  absoluteObjectPosition(): Float32Array;
+  globalPosition(): Float32Array;
+  formation(): Float32Array;
+  objectPosition(): Float32Array;
+  tautCables(): Uint32Array;
   solutionIndex(): number | null;
   dt(): number;
-  velocity(): Point2[];
+  velocity(): Float32Array;
   solutions(): FkSolutionsOutput;
   free(): void;
 }
 
 export class VvcmManualSimulation {
-  constructor(robotCount: number, holdHeight: number, sheet: readonly Point2Input[]);
-  init(formation: readonly Point2Input[], poInitial: Point3Input): Point3;
-  getNewStableSolution(formation: readonly Point2Input[]): Point3;
-  globalPosition(): Point2;
+  constructor(holdHeight: number, sheet: PointMatrixInput);
+  init(formation: PointMatrixInput, poInitial: Point3Input): Float32Array;
+  getNewStableSolution(formation: PointMatrixInput): Float32Array;
+  globalPosition(): Float32Array;
   hasFormation(): boolean;
-  formation(): Point2[] | null;
-  objectPosition(): Point3 | null;
-  absoluteObjectPosition(): Point3 | null;
-  tautCables(): number[];
+  formation(): Float32Array | null;
+  objectPosition(): Float32Array | null;
+  absoluteObjectPosition(): Float32Array | null;
+  tautCables(): Uint32Array;
   solutionIndex(): number | null;
   solutions(): FkSolutionsOutput;
   free(): void;

@@ -1,20 +1,19 @@
+#![allow(clippy::excessive_precision)]
+
 use vvcm_rs::{
-    FkSolution, FkSolutions, Point2, Point3, RobotFormation, Scalar, SheetShape, VvcmError, VvcmFk,
+    FkSolution, FkSolutions, Point2, Point3, Scalar, VvcmError, VvcmFk, distance3, translated_xy_by,
 };
 
 #[test]
 fn readme_sample_matches_expected_solutions() {
-    // Reuse the exact README sample so the docs and regression test stay aligned.
     let formation = readme_formation();
     let sheet = readme_sheet();
-    // Build the solver with four robots and a 1000 mm hold height.
-    let mut fk = VvcmFk::new(4, 1000.0, sheet).unwrap();
+    let mut fk = VvcmFk::new(1000.0, sheet).unwrap();
 
     assert_eq!(fk.robot_count(), 4);
     assert_eq!(fk.hold_height(), 1000.0);
 
-    // One solve should populate both the complete and stable solution sets.
-    let solutions = fk.update_stable_solutions(formation).unwrap();
+    let solutions = fk.update_stable_solutions(&formation).unwrap();
 
     assert_eq!(solutions.all_count(), 3);
     assert_eq!(solutions.stable_count(), 2);
@@ -23,7 +22,6 @@ fn readme_sample_matches_expected_solutions() {
         assert!(solution.lambda_values.iter().all(|value| value.is_finite()));
     }
 
-    // Check the stable branches in the order returned by the solver.
     let stable: Vec<_> = solutions.stable().collect();
     assert_point3_close(
         stable[0].po,
@@ -43,22 +41,23 @@ fn readme_sample_matches_expected_solutions() {
     assert_eq!(stable[1].taut_cables, vec![0, 2, 3]);
     assert_nonnegative_lambda_values(&stable[1].lambda_values);
 
-    // The full set should still contain at least one unstable branch.
     assert!(solutions.iter().any(|solution| !solution.stable));
 }
 
 #[test]
 fn meter_scale_inputs_return_meter_scale_solutions() {
-    let mut millimeter_fk = VvcmFk::new(4, 1000.0, readme_sheet()).unwrap();
+    let readme_formation = readme_formation();
+    let mut millimeter_fk = VvcmFk::new(1000.0, readme_sheet()).unwrap();
     let millimeter_solutions = millimeter_fk
-        .update_stable_solutions(readme_formation())
+        .update_stable_solutions(&readme_formation)
         .unwrap()
         .clone();
 
     let scale = 0.001;
-    let mut meter_fk = VvcmFk::new(4, 1000.0 * scale, scaled_sheet(readme_sheet(), scale)).unwrap();
+    let meter_formation = scaled_points(&readme_formation, scale);
+    let mut meter_fk = VvcmFk::new(1000.0 * scale, scaled_points(&readme_sheet(), scale)).unwrap();
     let meter_solutions = meter_fk
-        .update_stable_solutions(scaled_formation(readme_formation(), scale))
+        .update_stable_solutions(&meter_formation)
         .unwrap()
         .clone();
 
@@ -82,18 +81,20 @@ fn meter_scale_inputs_return_meter_scale_solutions() {
 
 #[test]
 fn independently_translated_inputs_map_solutions_back_to_original_frames() {
-    let mut base_fk = VvcmFk::new(4, 1000.0, readme_sheet()).unwrap();
+    let readme_formation = readme_formation();
+    let mut base_fk = VvcmFk::new(1000.0, readme_sheet()).unwrap();
     let base_solutions = base_fk
-        .update_stable_solutions(readme_formation())
+        .update_stable_solutions(&readme_formation)
         .unwrap()
         .clone();
 
     let formation_offset = Point2::new(-5000.0, 1200.0);
     let sheet_offset = Point2::new(700.0, -900.0);
+    let translated_formation = translated_points(&readme_formation, formation_offset);
     let mut translated_fk =
-        VvcmFk::new(4, 1000.0, translated_sheet(readme_sheet(), sheet_offset)).unwrap();
+        VvcmFk::new(1000.0, translated_points(&readme_sheet(), sheet_offset)).unwrap();
     let translated_solutions = translated_fk
-        .update_stable_solutions(readme_formation().translated_by(formation_offset))
+        .update_stable_solutions(&translated_formation)
         .unwrap()
         .clone();
 
@@ -109,16 +110,15 @@ fn independently_translated_inputs_map_solutions_back_to_original_frames() {
         assert_slice_close(&translated.lambda_values, &base.lambda_values, 1.0e-3);
         assert_point3_close(
             translated.po,
-            base.po.translated_xy_by(formation_offset),
+            translated_xy_by(base.po, formation_offset),
             0.08,
         );
-        assert_point2_close(translated.vo, base.vo.translated_by(sheet_offset), 0.08);
+        assert_point2_close(translated.vo, translate_point2(base.vo, sheet_offset), 0.08);
     }
 }
 
 #[test]
 fn fk_solutions_track_stability_per_solution() {
-    // FkSolutions should count stable branches independently from all branches.
     let solutions = FkSolutions::new(vec![
         FkSolution::new(
             false,
@@ -146,39 +146,17 @@ fn fk_solutions_track_stability_per_solution() {
 #[test]
 #[allow(clippy::excessive_precision)]
 fn six_robot_local_sample_matches_expected_solution() {
-    // Start from robot node positions on the world-coordinate XY plane, then shift them to a local origin.
-    let absolute_formation = RobotFormation::new(vec![
-        Point2::new(-27.419184, -176.293854),
-        Point2::new(398.141083, -35.190411),
-        Point2::new(517.018127, 338.271301),
-        Point2::new(285.155762, 609.95575),
-        Point2::new(-175.608231, 569.463562),
-        Point2::new(-301.437988, 194.695297),
-    ])
-    .unwrap();
-    let origin = absolute_formation.points()[0];
-    let local_formation = absolute_formation.relative_to(origin);
-    // Use the matching six-robot unfolded-sheet fixture in the sheet's local coordinate frame.
-    let sheet = SheetShape::new(vec![
-        Point2::new(-131.665741, -376.508026),
-        Point2::new(480.675873, -388.066681),
-        Point2::new(877.700256, 217.088806),
-        Point2::new(562.778748, 826.754089),
-        Point2::new(-107.442101, 918.166626),
-        Point2::new(-453.516937, 284.887146),
-    ])
-    .unwrap();
-    // Solve the local-frame formation and keep the stable branch nearest the reference pose.
-    let mut fk = VvcmFk::new(6, 823.0, sheet).unwrap();
+    let absolute_formation = six_robot_formation();
+    let origin = absolute_formation[0];
+    let local_formation = relative_points(&absolute_formation, origin);
+    let mut fk = VvcmFk::new(823.0, six_robot_sheet()).unwrap();
 
-    let solutions = fk.update_stable_solutions(local_formation).unwrap();
+    let solutions = fk.update_stable_solutions(&local_formation).unwrap();
     let expected = Point3::new(137.674, 420.879, 301.218);
     let closest = solutions
         .stable()
         .min_by(|left, right| {
-            left.po
-                .distance_to(expected)
-                .total_cmp(&right.po.distance_to(expected))
+            distance3(left.po, expected).total_cmp(&distance3(right.po, expected))
         })
         .unwrap();
 
@@ -187,24 +165,21 @@ fn six_robot_local_sample_matches_expected_solution() {
 
 #[test]
 fn infeasible_formation_is_reported() {
-    // A stretched formation outside the sheet should be rejected as infeasible.
-    let sheet = SheetShape::new(vec![
+    let sheet = vec![
         Point2::new(0.0, 0.0),
         Point2::new(1.0, 0.0),
         Point2::new(1.0, 1.0),
         Point2::new(0.0, 1.0),
-    ])
-    .unwrap();
-    let formation = RobotFormation::new(vec![
+    ];
+    let formation = vec![
         Point2::new(0.0, 0.0),
         Point2::new(2.0, 0.0),
         Point2::new(2.0, 2.0),
         Point2::new(0.0, 2.0),
-    ])
-    .unwrap();
-    let mut fk = VvcmFk::new(4, 10.0, sheet).unwrap();
+    ];
+    let mut fk = VvcmFk::new(10.0, sheet).unwrap();
 
-    let error = fk.update_stable_solutions(formation).unwrap_err();
+    let error = fk.update_stable_solutions(&formation).unwrap_err();
 
     assert_eq!(error, VvcmError::InfeasibleFormation);
     assert!(fk.solutions().is_empty());
@@ -212,16 +187,14 @@ fn infeasible_formation_is_reported() {
 
 #[test]
 fn formation_dimension_mismatch_is_reported() {
-    // The robot count should be validated before the solver attempts any geometry work.
-    let mut fk = VvcmFk::new(4, 1000.0, readme_sheet()).unwrap();
-    let formation = RobotFormation::new(vec![
+    let mut fk = VvcmFk::new(1000.0, readme_sheet()).unwrap();
+    let formation = vec![
         Point2::new(0.0, 0.0),
         Point2::new(1.0, 0.0),
         Point2::new(0.0, 1.0),
-    ])
-    .unwrap();
+    ];
 
-    let error = fk.update_stable_solutions(formation).unwrap_err();
+    let error = fk.update_stable_solutions(&formation).unwrap_err();
 
     assert_eq!(
         error,
@@ -233,59 +206,69 @@ fn formation_dimension_mismatch_is_reported() {
     );
 }
 
-fn readme_formation() -> RobotFormation {
-    // Keep this fixture identical to the README usage snippet; each point is a robot node position on the world-coordinate XY plane.
-    RobotFormation::new(vec![
+fn readme_formation() -> Vec<Point2> {
+    vec![
         Point2::new(213.7, 122.7),
         Point2::new(804.6, 37.2),
         Point2::new(904.0, 550.0),
         Point2::new(439.3, 715.9),
-    ])
-    .unwrap()
+    ]
 }
 
-fn readme_sheet() -> SheetShape {
-    // Keep this fixture identical to the README usage snippet; each point is a vertex in the sheet's local coordinate frame.
-    SheetShape::new(vec![
+fn readme_sheet() -> Vec<Point2> {
+    vec![
         Point2::new(-316.1, -421.9),
         Point2::new(803.4, -384.1),
         Point2::new(746.1, 712.8),
         Point2::new(-367.3, 664.2),
-    ])
-    .unwrap()
+    ]
 }
 
-fn scaled_formation(formation: RobotFormation, scale: Scalar) -> RobotFormation {
-    RobotFormation::new(
-        formation
-            .points()
-            .iter()
-            .map(|point| scaled_point2(*point, scale))
-            .collect(),
-    )
-    .unwrap()
+fn six_robot_formation() -> Vec<Point2> {
+    vec![
+        Point2::new(-27.419184, -176.293854),
+        Point2::new(398.141083, -35.190411),
+        Point2::new(517.018127, 338.271301),
+        Point2::new(285.155762, 609.95575),
+        Point2::new(-175.608231, 569.463562),
+        Point2::new(-301.437988, 194.695297),
+    ]
 }
 
-fn scaled_sheet(sheet: SheetShape, scale: Scalar) -> SheetShape {
-    SheetShape::new(
-        sheet
-            .vertices()
-            .iter()
-            .map(|point| scaled_point2(*point, scale))
-            .collect(),
-    )
-    .unwrap()
+fn six_robot_sheet() -> Vec<Point2> {
+    vec![
+        Point2::new(-131.665741, -376.508026),
+        Point2::new(480.675873, -388.066681),
+        Point2::new(877.700256, 217.088806),
+        Point2::new(562.778748, 826.754089),
+        Point2::new(-107.442101, 918.166626),
+        Point2::new(-453.516937, 284.887146),
+    ]
 }
 
-fn translated_sheet(sheet: SheetShape, offset: Point2) -> SheetShape {
-    SheetShape::new(
-        sheet
-            .vertices()
-            .iter()
-            .map(|point| point.translated_by(offset))
-            .collect(),
-    )
-    .unwrap()
+fn scaled_points(points: &[Point2], scale: Scalar) -> Vec<Point2> {
+    points
+        .iter()
+        .map(|point| scaled_point2(*point, scale))
+        .collect()
+}
+
+fn translated_points(points: &[Point2], offset: Point2) -> Vec<Point2> {
+    points
+        .iter()
+        .map(|point| translate_point2(*point, offset))
+        .collect()
+}
+
+fn relative_points(points: &[Point2], origin: Point2) -> Vec<Point2> {
+    points
+        .iter()
+        .map(|point| Point2::new(point.x - origin.x, point.y - origin.y))
+        .collect()
+}
+
+fn translate_point2(point: Point2, offset: Point2) -> Point2 {
+    Point2::new(point.x + offset.x, point.y + offset.y)
 }
 
 fn scaled_point2(point: Point2, scale: Scalar) -> Point2 {
@@ -297,7 +280,6 @@ fn scaled_point3(point: Point3, scale: Scalar) -> Point3 {
 }
 
 fn assert_point2_close(actual: Point2, expected: Point2, tolerance: Scalar) {
-    // Compare floating-point coordinates with a tolerance instead of exact equality.
     assert!(
         (actual.x - expected.x).abs() <= tolerance,
         "x differs: actual {}, expected {}",
@@ -313,7 +295,6 @@ fn assert_point2_close(actual: Point2, expected: Point2, tolerance: Scalar) {
 }
 
 fn assert_point3_close(actual: Point3, expected: Point3, tolerance: Scalar) {
-    // Reuse the 2D check for x/y, then compare z separately for clearer failures.
     assert_point2_close(
         Point2::new(actual.x, actual.y),
         Point2::new(expected.x, expected.y),

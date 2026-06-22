@@ -6,7 +6,7 @@
 //! branches in the returned [`FkSolutions`] collection.
 
 use crate::error::VvcmError;
-use crate::types::{FkSolution, FkSolutions, Point2, Point3, RobotFormation, Scalar, SheetShape};
+use crate::types::{FkSolution, FkSolutions, IntoPoint2, Point2, Point3, Scalar};
 use nalgebra::{DMatrix, DVector};
 
 // Numerical thresholds are intentionally local to the solver because changing
@@ -32,10 +32,10 @@ pub struct VvcmFk {
     /// The fixed height of the robot end-effectors above the sheet plane,
     /// used to recover the object Z coordinate.
     hold_height: Scalar,
-    /// The fixed sheet geometry, `robot_count` x 2.
-    sheet: SheetShape,
-    /// The most recent robot formation cache, `robot_count` x 2. None before the first update.
-    formation: Option<RobotFormation>,
+    /// The fixed sheet geometry, one point per robot.
+    sheet: Vec<Point2>,
+    /// The most recent robot formation cache. None before the first update.
+    formation: Option<Vec<Point2>>,
     /// The most recent solution cache, cleared before each update.
     /// Candidate branches are always stored, but all stable flags may be false.
     solutions: FkSolutions,
@@ -46,52 +46,51 @@ pub struct VvcmFk {
 }
 
 impl VvcmFk {
-    /// Creates a solver for `robot_count` robots holding `sheet` at
-    /// `hold_height`.
+    /// Creates a solver holding `sheet` at `hold_height`.
     ///
-    /// `sheet` must contain exactly one vertex per robot, and each vertex must
-    /// be ordered to match the robot formation points passed to
-    /// [`VvcmFk::update_stable_solutions`].
+    /// `sheet` must contain at least three vertices. The robot count is
+    /// derived from `sheet.len()`, and each vertex must be ordered to match the
+    /// robot formation points passed to [`VvcmFk::update_stable_solutions`].
     ///
     /// # Errors
     ///
-    /// Returns [`VvcmError::DimensionMismatch`] when `robot_count` is less than
-    /// three or when the sheet vertex count does not match `robot_count`.
+    /// Returns [`VvcmError::DimensionMismatch`] when the sheet has fewer than
+    /// three vertices.
     ///
     /// # Units
     ///
     /// Length units are not encoded in the type system. Inputs only need to use
     /// one consistent length unit; the solver normalizes coordinates
     /// internally and maps results back to the caller's original frame.
-    pub fn new(
-        robot_count: usize,
-        hold_height: Scalar,
-        sheet: SheetShape,
-    ) -> Result<Self, VvcmError> {
-        if robot_count < 3 {
-            return Err(VvcmError::DimensionMismatch {
-                context: "robot count",
-                expected: 3,
-                actual: robot_count,
-            });
-        }
-
-        if sheet.len() != robot_count {
+    pub fn new(hold_height: Scalar, sheet: Vec<Point2>) -> Result<Self, VvcmError> {
+        if sheet.len() < 3 {
             return Err(VvcmError::DimensionMismatch {
                 context: "sheet vertex count",
-                expected: robot_count,
+                expected: 3,
                 actual: sheet.len(),
             });
         }
 
         Ok(Self {
-            robot_count,
+            robot_count: sheet.len(),
             hold_height,
             sheet,
             formation: None,
             solutions: FkSolutions::default(),
             last_normalization: None,
         })
+    }
+
+    /// Creates a solver from row-like sheet vertices.
+    pub fn from_rows<I, P>(hold_height: Scalar, sheet: I) -> Result<Self, VvcmError>
+    where
+        I: IntoIterator<Item = P>,
+        P: IntoPoint2,
+    {
+        Self::new(
+            hold_height,
+            sheet.into_iter().map(IntoPoint2::into_point2).collect(),
+        )
     }
 
     /// Solves and stores the stable forward-kinematics branches for
@@ -112,14 +111,14 @@ impl VvcmFk {
     /// [`VvcmError::NoStableSolution`] when every candidate is unstable.
     pub fn update_stable_solutions(
         &mut self,
-        formation: RobotFormation,
+        formation: &[Point2],
     ) -> Result<&FkSolutions, VvcmError> {
-        self.validate_formation(&formation)?;
+        self.validate_formation(formation)?;
 
         self.solutions = FkSolutions::default();
-        self.formation = Some(formation.clone());
+        self.formation = Some(formation.to_vec());
 
-        let normalized = NormalizedProblem::new(&formation, &self.sheet, self.hold_height);
+        let normalized = NormalizedProblem::new(formation, &self.sheet, self.hold_height);
         self.last_normalization = Some(normalized.transform);
 
         let mut candidates = self.find_candidate_solutions(
@@ -146,6 +145,19 @@ impl VvcmFk {
         }
     }
 
+    /// Solves and stores stable branches from row-like formation values.
+    pub fn update_stable_solutions_from_rows<I, P>(
+        &mut self,
+        formation: I,
+    ) -> Result<&FkSolutions, VvcmError>
+    where
+        I: IntoIterator<Item = P>,
+        P: IntoPoint2,
+    {
+        let formation: Vec<Point2> = formation.into_iter().map(IntoPoint2::into_point2).collect();
+        self.update_stable_solutions(&formation)
+    }
+
     /// Returns the fixed number of robots solved by this engine.
     pub fn robot_count(&self) -> usize {
         self.robot_count
@@ -158,14 +170,14 @@ impl VvcmFk {
     }
 
     /// Borrows the fixed sheet geometry.
-    pub fn sheet(&self) -> &SheetShape {
+    pub fn sheet(&self) -> &[Point2] {
         &self.sheet
     }
 
     /// Borrows the most recent formation passed to
     /// [`VvcmFk::update_stable_solutions`].
-    pub fn current_formation(&self) -> Option<&RobotFormation> {
-        self.formation.as_ref()
+    pub fn current_formation(&self) -> Option<&[Point2]> {
+        self.formation.as_deref()
     }
 
     /// Borrows the most recent solution cache.
@@ -174,7 +186,7 @@ impl VvcmFk {
     }
 
     /// Checks that a formation-like value has one point per robot.
-    pub(crate) fn validate_formation(&self, formation: &RobotFormation) -> Result<(), VvcmError> {
+    pub(crate) fn validate_formation(&self, formation: &[Point2]) -> Result<(), VvcmError> {
         if formation.len() != self.robot_count {
             return Err(VvcmError::DimensionMismatch {
                 context: "robot formation point count",
@@ -189,8 +201,8 @@ impl VvcmFk {
     /// Enumerates taut cable subsets and solves every feasible candidate branch.
     fn find_candidate_solutions(
         &self,
-        formation: &RobotFormation,
-        sheet: &SheetShape,
+        formation: &[Point2],
+        sheet: &[Point2],
         hold_height: Scalar,
     ) -> Result<Vec<CandidateSolution>, VvcmError> {
         let problem = ProblemData::new(formation, sheet);
@@ -357,8 +369,8 @@ struct CandidateSolution {
 /// Solver inputs after shifting to positive coordinates and uniform scaling.
 #[derive(Debug, Clone)]
 struct NormalizedProblem {
-    formation: RobotFormation,
-    sheet: SheetShape,
+    formation: Vec<Point2>,
+    sheet: Vec<Point2>,
     hold_height: Scalar,
     transform: NormalizationTransform,
 }
@@ -366,7 +378,7 @@ struct NormalizedProblem {
 impl NormalizedProblem {
     /// Builds normalized inputs while preserving the transform needed to map
     /// solutions back to the caller's original coordinate frames.
-    fn new(formation: &RobotFormation, sheet: &SheetShape, hold_height: Scalar) -> Self {
+    fn new(formation: &[Point2], sheet: &[Point2], hold_height: Scalar) -> Self {
         let transform = NormalizationTransform::new(formation, sheet);
 
         Self {
@@ -388,9 +400,9 @@ struct NormalizationTransform {
 
 impl NormalizationTransform {
     /// Chooses independent positive-coordinate origins and one shared scale.
-    fn new(formation: &RobotFormation, sheet: &SheetShape) -> Self {
-        let formation_bounds = PointBounds::from_points(formation.points());
-        let sheet_bounds = PointBounds::from_points(sheet.vertices());
+    fn new(formation: &[Point2], sheet: &[Point2]) -> Self {
+        let formation_bounds = PointBounds::from_points(formation);
+        let sheet_bounds = PointBounds::from_points(sheet);
         let upper = formation_bounds.upper().max(sheet_bounds.upper());
 
         Self {
@@ -401,33 +413,28 @@ impl NormalizationTransform {
     }
 
     /// Returns the formation expressed in the normalized solve frame.
-    fn normalize_formation(self, formation: &RobotFormation) -> RobotFormation {
-        RobotFormation::new(
-            formation
-                .points()
-                .iter()
-                .map(|point| self.normalize_point(*point, self.formation_origin))
-                .collect(),
-        )
-        .expect("validated formation cannot be empty")
+    fn normalize_formation(self, formation: &[Point2]) -> Vec<Point2> {
+        formation
+            .iter()
+            .map(|point| self.normalize_point(*point, self.formation_origin))
+            .collect()
     }
 
     /// Returns the sheet expressed in the normalized solve frame.
-    fn normalize_sheet(self, sheet: &SheetShape) -> SheetShape {
-        SheetShape::new(
-            sheet
-                .vertices()
-                .iter()
-                .map(|point| self.normalize_point(*point, self.sheet_origin))
-                .collect(),
-        )
-        .expect("validated sheet cannot have fewer than three vertices")
+    fn normalize_sheet(self, sheet: &[Point2]) -> Vec<Point2> {
+        sheet
+            .iter()
+            .map(|point| self.normalize_point(*point, self.sheet_origin))
+            .collect()
     }
 
     /// Shifts a point to a positive-coordinate origin and applies the shared
     /// scale.
     fn normalize_point(self, point: Point2, origin: Point2) -> Point2 {
-        point.relative_to(origin).scaled_by(self.scale)
+        Point2::new(
+            (point.x - origin.x) * self.scale,
+            (point.y - origin.y) * self.scale,
+        )
     }
 
     /// Maps a normalized object position back to the formation frame supplied
@@ -532,7 +539,7 @@ struct ProblemData {
 
 impl ProblemData {
     /// Builds cached coordinate arrays and all pairwise linear constraints.
-    fn new(formation: &RobotFormation, sheet: &SheetShape) -> Self {
+    fn new(formation: &[Point2], sheet: &[Point2]) -> Self {
         let point_count = formation.len();
         let mut formation_x = Vec::with_capacity(point_count);
         let mut formation_y = Vec::with_capacity(point_count);
@@ -541,7 +548,7 @@ impl ProblemData {
         let mut sheet_y = Vec::with_capacity(point_count);
         let mut sheet_norm_squared = Vec::with_capacity(point_count);
 
-        for (formation_point, sheet_point) in formation.points().iter().zip(sheet.vertices()) {
+        for (formation_point, sheet_point) in formation.iter().zip(sheet) {
             formation_x.push(formation_point.x);
             formation_y.push(formation_point.y);
             formation_norm_squared.push(
@@ -848,18 +855,16 @@ mod tests {
 
     #[test]
     fn normalization_moves_inputs_to_positive_target_box() {
-        let formation = RobotFormation::new(vec![
+        let formation = vec![
             Point2::new(-20.0, 40.0),
             Point2::new(30.0, -10.0),
             Point2::new(80.0, 90.0),
-        ])
-        .unwrap();
-        let sheet = SheetShape::new(vec![
+        ];
+        let sheet = vec![
             Point2::new(-300.0, -100.0),
             Point2::new(700.0, -50.0),
             Point2::new(100.0, 500.0),
-        ])
-        .unwrap();
+        ];
 
         let normalized = NormalizedProblem::new(&formation, &sheet, 250.0);
 
@@ -874,13 +879,13 @@ mod tests {
         assert_close(normalized.transform.scale, 1.0, 1.0e-6);
         assert_close(normalized.hold_height, 250.0, 1.0e-6);
 
-        for point in normalized.formation.points() {
+        for point in &normalized.formation {
             assert!(point.x >= 0.0);
             assert!(point.y >= 0.0);
             assert!(point.x <= NORMALIZED_COORDINATE_UPPER_BOUND);
             assert!(point.y <= NORMALIZED_COORDINATE_UPPER_BOUND);
         }
-        for point in normalized.sheet.vertices() {
+        for point in &normalized.sheet {
             assert!(point.x >= 0.0);
             assert!(point.y >= 0.0);
             assert!(point.x <= NORMALIZED_COORDINATE_UPPER_BOUND);
@@ -890,29 +895,23 @@ mod tests {
 
     #[test]
     fn normalization_scales_small_inputs_to_target_upper_bound() {
-        let formation = RobotFormation::new(vec![
+        let formation = vec![
             Point2::new(2.0, 1.0),
             Point2::new(4.0, 1.5),
             Point2::new(3.0, 2.0),
-        ])
-        .unwrap();
-        let sheet = SheetShape::new(vec![
+        ];
+        let sheet = vec![
             Point2::new(-0.5, -0.25),
             Point2::new(1.5, -0.25),
             Point2::new(1.0, 0.75),
-        ])
-        .unwrap();
+        ];
 
         let normalized = NormalizedProblem::new(&formation, &sheet, 2.5);
 
         assert_close(normalized.transform.scale, 500.0, 1.0e-3);
         assert_close(normalized.hold_height, 1250.0, 1.0e-3);
-        assert_close(
-            max_coordinate(normalized.formation.points()),
-            1000.0,
-            1.0e-3,
-        );
-        assert_close(max_coordinate(normalized.sheet.vertices()), 1000.0, 1.0e-3);
+        assert_close(max_coordinate(&normalized.formation), 1000.0, 1.0e-3);
+        assert_close(max_coordinate(&normalized.sheet), 1000.0, 1.0e-3);
     }
 
     fn max_coordinate(points: &[Point2]) -> Scalar {
